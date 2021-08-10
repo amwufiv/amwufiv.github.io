@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="stylesheet" href="/css/main.css" />
+    {% if site.google_analytics and jekyll.environment == 'production' %}
+    {% include analytics.html %}
+    {% endif %}
+    <!-- todo -->
+</head>
+<body>
+    <div id="container">
+        <div id="content">
+            <header id="header">
+                <h1>
+                    <a href="/">UFIV</a>
+                </h1>
+            </header>
+            <section>
+                {{ content }}
+            </section>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="social">
+            <a href="https://twitter.com/{{ site.data.social.twitter }}" target="_blank" rel="noopener noreferrer"">
+                <i class="bi bi-twitter"></i>
+            </a>
+            <a href="mailto:{{ site.data.social.mail }}" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-envelope-fill"></i>
+            </a>
+            <a href="https://github.com/{{ site.data.social.github }}" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+        
+        <div class="copyright">
+            <span> Copyright © {{ site.time | date: "%Y" }} ufiv </span>
+        </div>
+        
+    </div>
+</body>
+</html>

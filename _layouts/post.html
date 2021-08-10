@@ -1,0 +1,26 @@
+---
+layout: layout
+class: post
+---
+<div class="postHeader">
+    <h1 class="posttitle">
+        <a href="{{ page.url }}">{{ page.title }}</a>
+    </h1>
+
+    <div class="byline">
+        <span><a href="/about/">ufiv</a></span>
+        <time datetime="{{page.date | date: "%Y-%m-%d"}}">{{ page.date | date: "%Y-%m-%d" }}</time>
+        <ul>
+            {% for tag in page.tags %}
+            <li>
+                <a href="/tag/{{ tag }}/">{{ tag }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<post class="{{ page.class }}">
+    {{ content }}
+</post>
+
