@@ -10,13 +10,20 @@ class: post
     <div class="byline">
         <span><a href="/about/">ufiv</a></span>
         <time datetime="{{page.date | date: "%Y-%m-%d"}}">{{ page.date | date: "%Y-%m-%d" }}</time>
-        <ul>
+        <ul class="tags">
+            {% if page.tags != empty %}
+                <i class="bi bi-tags"></i>
+            {% endif %}
+
             {% for tag in page.tags %}
-            <li>
-                <a href="/tag/{{ tag }}/">{{ tag }}</a>
-            </li>
+            <li><a href="/tag/{{ tag }}/">{{ tag }}</a></li>
             {% endfor %}
         </ul>
+        
+        
+        
+    
+        
     </div>
 </div>
 

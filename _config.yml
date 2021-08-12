@@ -31,6 +31,9 @@ url: "https://ufiv.info" # the base hostname & protocol for your site, e.g. http
 plugins:
   - jekyll-feed
 
+feed:
+  path: atom.xml
+
 sass:
   sass_dir: _sass
   # style: compressed
@@ -58,3 +61,13 @@ timezone: Asia/Shanghai
 permalink: /:title.html
 
 google_analytics:  UA-84264625-1
+
+# Conversion
+markdown:    kramdown
+highlighter: rouge
+
+# Markdown Processors
+kramdown:
+  input: GFM
+  auto_ids: true
+  syntax_highlighter: rouge

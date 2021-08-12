@@ -15,10 +15,19 @@ $post: (
     width: 700px,
 );
 
+$maxwidth4phone: 100%;
+$maxwidth4tablet: 85%;
+$maxwidth: 50%;
+
 $image: (
     width: 100px,
     hight: 100px,
     border: 3px,
 );
+
+$device: (
+    phone: 500px,
+    tablet: 1100px
+)
 
 
