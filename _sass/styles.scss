@@ -1,32 +1,26 @@
 @import 'variables';
 
+
 @font-face {
-    font-family: "bootstrap icon";
-    src: url(/assets/fonts/bootstrap-icons.woff) format("woff"),
-         url(/assets/fonts/bootstrap-icons.woff2) format("woff2");
-}
-@font-face {
-    font-family: "cyberpunk";
-    src: url(/assets/fonts/Cyberpunk-Regular.ttf) format("ttf");
+    font-family: "artistic font";
+    src: url(/assets/fonts/Gotham-Bold.otf);
 }
 
 @font-face {
     font-family: "source code pro";
-    src: url(/assets/fonts/SourceCodePro-Regular.ttf) format("ttf");
+    src: url(/assets/fonts/SourceCodePro-Regular.ttf);
 }
 
-@font-face {
-    font-family: "notomono";
-    src: url(/assets/fonts/NotoSansMonoCJKsc-Regular.ttf) format("ttf");
-}
+
 @font-face {
     font-family: "noto";
-    src: url(/assets/fonts/NotoSansCJKsc-Regular.ttf) format("ttf")
+    src: url(/assets/fonts/NotoSansSC-Regular.otf);
+    // unicode-range: U+4E00-9FFF;
 }
 
 @font-face {
     font-family: "sourcehan";
-    src: url(/assets/fonts/SourceHanSansSC-VF.otf.woff2) format("woff2");
+    src: url(/assets/fonts/SourceHanSansSC-VF.otf.woff2);
 }
 
 html,body{
@@ -37,19 +31,20 @@ html,body{
 
 // 设备自适应
 body {
-    font-family: "sourcehan";
-    font-size: 17px;
+    font-family: "noto";
+    font-size: 19px;
     background-color: $bgColor;
     color: $darkerGray;
     line-height: 1.5em;
+    letter-spacing: 0.1em;
     margin: 0px;
     padding: 0px;
     @media only screen and (max-width: map-get($device, phone )) {
-        font-size: 12px;
+        font-size: 15px;
     }
 
     @media only screen and (min-width: map-get($device, phone )) and (max-width: map-get($device, tablet )) {
-        font-size: 14px;
+        font-size: 15px;
     }
 }
 
@@ -116,7 +111,7 @@ h4 { font-size: 1.2em; margin: 1.2em 0 0.6em 0; color: $lightGray; }
 p {
     font-size: 1em;
     margin: 1em 0;
-    line-height: 1.2em;
+    line-height: 1.4em;
     // 行内代码
     code{
         font-size: 0.9em;
@@ -155,7 +150,7 @@ pre {
     }
 
     a {
-        font-family: "cyberpunk";
+        font-family: "artistic font";
         text-decoration: none;
     }
 }

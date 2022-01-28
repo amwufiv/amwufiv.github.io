@@ -1,0 +1,28 @@
+require 'org-ruby'
+require 'kramdown'
+
+module Jekyll
+    class OrgConverter < Converter
+        safe true
+        priority :highest
+
+        @@formatter = Rouge::Formatters::HTML.new
+
+        def matches(ext)
+            ext =~ /^\.org$/i
+        end
+
+        def output_ext(ext)
+            ".html"
+        end
+
+        def convert(content)
+            Kramdown::Document.new(Orgmode::Parser.new(content).to_markdown).to_html
+            
+            
+        end
+             
+
+
+    end
+end

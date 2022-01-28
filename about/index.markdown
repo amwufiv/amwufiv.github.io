@@ -6,13 +6,7 @@ layout: layout
 tags:
 ---
 
-
-# Projects
-to be filled in
- 
-# About me
-**\#plaincoder \#bigdata**
-
-I think the code is cool and fascinating everytime when I run the program and think about how the 0's and 1's are implementing our ideas.
+# 关于我
+我的[跑步主页](https://ufiv.info/running_page/)。
 
 
