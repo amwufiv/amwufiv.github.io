@@ -3,7 +3,7 @@ name: Publish GitHub Pages
 on:
   push:
     branches: [ master ]    
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   github-pages:
@@ -11,11 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
-      with:
-        path: vendor/bundle
-        key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile') }}
-        restore-keys: |
-          ${{ runner.os }}-gems-
+        with:
+          path: vendor/bundle
+          key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile') }}
+          restore-keys: |
+            ${{ runner.os }}-gems-
       - uses: helaili/jekyll-action@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          target_branch: 'gh-pages'
