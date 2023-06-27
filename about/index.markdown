@@ -7,6 +7,6 @@ tags:
 ---
 
 # 关于我
-我的[跑步主页](https://ufiv.info/running_page/)。
+我的[跑步主页](https://blog.ufiv.org/running_page/)。
 
 
