@@ -8,16 +8,16 @@ tags:
 
 最近打开了好久没更新的博客，感觉已经有点破败不堪。自从上次在hexo上尝试把org的文件转成渲染好的html文件失败劝退后再没打理过。最近几天顺手和终端一起翻新了下，这里主要记录下我的blog和terminal的配置过程。
 ### Terminal
-mbp上的终端我主要是用iterm2 + oh my zsh + tmux. 
+mac的终端我主要是用 Alacritty + oh my zsh + tmux. 
 
-iterm2这里主要用到了batman的配色，但要把red的颜色改成橘色，避免混淆报错的输出。选择color256，字体随意，mono即可。勾选applications in terminal may access clipboard，保证在tmux中能直接Command+C/V操作剪切板。
-
-oh-my-zsh 只使用最常见的几个插件，可以google之，主题使用了agnoster，有个小问题是dir path如果过长时右侧就没什么空间了，不过影响不大，可以使用另一个主题[bullet-train]或自定义segment来解决。
+Alacritty 使用 rust 开发，体验下来真的很快。支持自定义快捷键和 vi mode，需要从头开始配置，但配置项较少。everforest_dark 主题 + RobotoMono 字体。prompt 使用 starship，只改了 git 的几个配置。
 
 tmux可以参考[我的配置](https://github.com/amwufiv/dotfiles/tree/master/tmux), 如果Ctrl 和 Caps 没有互换的话可能需要修改下prefix，但我强烈建议互换Ctrl 和 Caps（用过都说好）。插件主要使用tmux-continuum来自动保存恢复session，是的电脑重启的话session会丢失 :(，当然也不是完美恢复，比如ssh连接无法找回。tmux-colortag插件主要用来给window tab着色，由于插件没提供显式指定color的配置项，因此如果要指定每个window的颜色的话，可以直接修改插件中的name2color.py脚本，顺便修改下根据id哈希选色。
 
 自从放弃iterm的分屏快捷键，整个人都好起来了XD，最后效果：
-![terminal](/image/terminal.png)
+![terminal](https://cdn.staticaly.com/gh/amwufiv/img_host@master/xxx/2023-06-29_23-24-51.59nwk9okju80.jpg)
+
+
 
 
 
