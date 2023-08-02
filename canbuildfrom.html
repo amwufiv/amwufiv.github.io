@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="stylesheet" href="/css/main.css" />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <link rel="icon" type="image/png" href="/assets/icon/icon.png"/>
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-84264625-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-84264625-1');
+</script>
+    
+    <!-- todo -->
+</head>
+<body>
+    <div id="container">
+        <div id="content">
+            <header id="header">
+                <h1>
+                    <a href="/">UFIV</a>
+                </h1>
+            </header>
+            <section>
+                <div class="postHeader">
+    <h1 class="posttitle">
+        <a href="/canbuildfrom.html">Scala中的CanBuildFrom</a>
+    </h1>
+
+    <div class="byline">
+        <span><a href="/about/">ufiv</a></span>
+        <time datetime="2018-07-03">2018-07-03</time>
+        <ul class="tags">
+            
+                <i class="bi bi-tags"></i>
+            
+
+            
+            <li><a href="/tag/scala/">scala</a></li>
+            
+        </ul>
+        
+        
+        
+    
+        
+    </div>
+</div>
+
+<post class="">
+    <p>了解CanBuildFrom主要还是因为我对Traversable能够正确处理Option上下文感到很不解（如下），List的flatMap函数能够正确拆掉Option上下文变成(2,3,4)，要知道Option也只是简单继承了两个与之无关的特质Product<sup id="fnref:Product" role="doc-noteref"><a href="#fn:Product" class="footnote" rel="footnote">1</a></sup>和Serializable，为何flatMap能够正确识别Option呢？</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">List</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span><span class="mi">2</span><span class="o">,</span><span class="mi">3</span><span class="o">).</span><span class="py">flatMap</span><span class="o">(</span><span class="n">x</span><span class="k">=&gt;</span><span class="nc">Some</span><span class="o">(</span><span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="o">))</span>
+<span class="c1">//res2: List[Int] = List(2, 3, 4)</span>
+</code></pre></div></div>
+<p>看一下List的flatMap函数签名：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">final</span> <span class="k">override</span> <span class="k">def</span> <span class="nf">flatMap</span><span class="o">[</span><span class="kt">B</span>, <span class="kt">That</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="nc">GenTraversableOnce</span><span class="o">[</span><span class="kt">B</span><span class="o">])(</span><span class="k">implicit</span> <span class="n">bf</span><span class="k">:</span> <span class="kt">CanBuildFrom</span><span class="o">[</span><span class="kt">List</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span>, <span class="kt">B</span>, <span class="kt">That</span><span class="o">])</span><span class="k">:</span> <span class="kt">That</span>
+</code></pre></div></div>
+<p>flatMap函数要求f是一个返回继承GenTraversableOnce特质的函数，那为什么能够返回Option呢，查看编译时的类型变换，发现原来存在一个隐式转换将Option转换成了Iterable：implicit def option2Iterable<a href="xo: Option[A]">A</a>: Iterable[A]。该隐式转换函数调用了toList方法将Option转换成了List,所以也就符合了f的函数签名，因为Some(x+1)被隐式转换成了List(x+1)。接下来就比较容易理解了，flatMap函数将具有traversable能力的上下文‘扁平化’，实现上是调用了seq统一将变成seq。</p>
+
+<p>所以说隐式转换虽然能够帮助我们开发更灵活的代码，但也加大了我们去理解别人代码的困难，这点在理解后面String的map函数中更有体会。</p>
+
+<h2 id="canbuildfrom">CanBuildFrom</h2>
+<p>那么CanBuildFrom又是什么呢，仔细看List的map和flatMap函数签名，发现它们都声明了一个隐式的CanBuildFrom参数bf。这个参数是用来干什么的呢，查看CanBuildFrom源码，发现bf主要是用来构建Builder的（通过构造函数）。</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">trait</span> <span class="nc">CanBuildFrom</span><span class="o">[</span><span class="kt">-From</span>, <span class="kt">-Elem</span>, <span class="kt">+To</span><span class="o">]</span> <span class="o">{</span>
+
+  <span class="cm">/** Creates a new builder on request of a collection.
+   *  @param from  the collection requesting the builder to be created.
+   *  @return a builder for collections of type To with element type Elem.
+   *          The collections framework usually arranges things so
+   *          that the created builder will build the same kind of collection
+   *          as from.
+   */</span>
+  <span class="k">def</span> <span class="nf">apply</span><span class="o">(</span><span class="n">from</span><span class="k">:</span> <span class="kt">From</span><span class="o">)</span><span class="k">:</span> <span class="kt">Builder</span><span class="o">[</span><span class="kt">Elem</span>, <span class="kt">To</span><span class="o">]</span>
+
+  <span class="cm">/** Creates a new builder from scratch.
+   *
+   *  @return a builder for collections of type To with element type Elem.
+   *  @see scala.collection.breakOut
+   */</span>
+  <span class="k">def</span> <span class="nf">apply</span><span class="o">()</span><span class="k">:</span> <span class="kt">Builder</span><span class="o">[</span><span class="kt">Elem</span>, <span class="kt">To</span><span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+<p>例如通过map函数，理论上我们能够将List[Int]构建成Seq[String],即根据需要返回合适的集合类型。通过bf()构建的builder，构造封装B的集合。有趣的是List中的map函数居然没有使用bf的builder，而还是自己实现构造了新的List，所以通过List.map还是转换成了List。
+而对于String的map函数(其实不是String而是StringOps的map函数),当f函数将字符串中每个字符转换成Int时，map函数会返回IndexedSeq类型集合，而如果f函数只是将字符作大写化处理时，map函数仍然会返回String。</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="s">"abc"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toInt</span><span class="o">)</span> 
+<span class="c1">//res4: scala.collection.immutable.IndexedSeq[Int] = Vector(97, 98, 99)</span>
+<span class="s">"abc"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)</span> 
+<span class="c1">//res5: String = ABC</span>
+</code></pre></div></div>
+<p>这是如何实现的呢？原来在Predef中定义了两个隐式方法/参数fallbackStringCanBuildFrom和StringCanBuildFrom,将f函数返回Char时会使用StringCanBuildFrom作为map的隐式参数，而f函数返回非Char时则会调用fallbackStringCanBuildFrom隐式方法。</p>
+
+<p>对于map，flatMap等函数，我们都可以通过传递cbf来构建合适的上下文，尽管函数签名比较让人难以理解。而在<a href="https://scala-lang.org/blog/2017/05/30/tribulations-canbuildfrom.html">官方的说明中</a>，已经考虑将CanBuildFrom这种晦涩难懂且不雅观的构建方式摒弃掉，通过使用map重载的方式实现目前的map函数。</p>
+
+<h3 id="构建一个自己bf">构建一个自己bf</h3>
+<p>那我们有没有办法将“hunter”.map(_.toUpper)也返回indexedSeq呢？当然可以，最简单的我们可以直接显式调用fallbackStringCanBuildFrom：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">val</span> <span class="nv">s1</span> <span class="k">=</span> <span class="s">"hunter"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)(</span><span class="n">fallbackStringCanBuildFrom</span><span class="o">)</span>
+</code></pre></div></div>
+<p>如果了解map的构造方式后我们也可以构造自己的CanBuildFrom：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">object</span> <span class="nc">Temp</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="nf">main</span><span class="o">(</span><span class="n">args</span><span class="k">:</span> <span class="kt">Array</span><span class="o">[</span><span class="kt">String</span><span class="o">])</span><span class="k">:</span> <span class="kt">Unit</span> <span class="o">=</span> <span class="o">{</span>
+
+
+
+    <span class="k">val</span> <span class="nv">myBF</span><span class="k">:</span> <span class="kt">CanBuildFrom</span><span class="o">[</span><span class="kt">String</span>, <span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">CanBuildFrom</span><span class="o">[</span><span class="kt">String</span>, <span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]</span> <span class="o">{</span>
+      <span class="k">def</span> <span class="nf">apply</span><span class="o">(</span><span class="n">from</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="nf">apply</span><span class="o">()</span>
+      <span class="k">def</span> <span class="nf">apply</span><span class="o">()</span>             <span class="k">=</span> <span class="k">new</span> <span class="nc">MyBuilder</span>
+    <span class="o">}</span>
+    <span class="k">val</span> <span class="nv">s</span> <span class="k">=</span> <span class="s">"hunter"</span>
+    <span class="k">val</span> <span class="nv">l</span> <span class="k">=</span> <span class="nv">s</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)(</span><span class="n">myBF</span><span class="o">)</span>
+    <span class="nf">println</span><span class="o">(</span><span class="n">l</span><span class="o">)</span>
+    <span class="c1">// l is List(H, U, N, T, E, R)</span>
+
+
+  <span class="o">}</span>
+
+
+
+<span class="o">}</span>
+
+<span class="k">class</span> <span class="nc">MyBuilder</span><span class="o">(</span><span class="n">list</span><span class="k">:</span> <span class="kt">ListBuffer</span><span class="o">[</span><span class="kt">Char</span><span class="o">])</span> <span class="k">extends</span> <span class="nc">ReusableBuilder</span><span class="o">[</span><span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]{</span>
+  <span class="k">def</span> <span class="nf">this</span><span class="o">()={</span>
+    <span class="nf">this</span><span class="o">(</span><span class="k">new</span> <span class="nc">ListBuffer</span><span class="o">[</span><span class="kt">Char</span><span class="o">])</span>
+  <span class="o">}</span>
+
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">clear</span><span class="o">()</span><span class="k">:</span> <span class="kt">Unit</span> <span class="o">=</span> <span class="o">{</span>
+    <span class="nv">list</span><span class="o">.</span><span class="py">clear</span><span class="o">()</span>
+  <span class="o">}</span>
+
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">+=</span><span class="o">(</span><span class="n">elem</span><span class="k">:</span> <span class="kt">Char</span><span class="o">)</span><span class="k">:</span> <span class="kt">MyBuilder.this.</span><span class="k">type</span> <span class="o">=</span> <span class="o">{</span><span class="nv">list</span><span class="o">.</span><span class="py">append</span><span class="o">(</span><span class="n">elem</span><span class="o">);</span><span class="k">this</span><span class="o">}</span>
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">result</span><span class="o">()</span><span class="k">:</span> <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]</span> <span class="k">=</span> <span class="nv">list</span><span class="o">.</span><span class="py">toList</span>
+<span class="o">}</span>
+
+</code></pre></div></div>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:Product" role="doc-endnote">
+      <p>题外还有一个有趣的地方，上文讲到Option引入了特质Product，Product主要是实现productIterator从而实现向Iterator的转换。在我们声明的case class中，编译器会在编译过程中自动引入Product，所以每当我们声明case class时，总能调用productIterator方法来遍历各元素。 <a href="#fnref:Product" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>
+
+</post>
+
+
+            </section>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="social">
+            <a href="https://twitter.com/amufiv" target="_blank" rel="noopener noreferrer"">
+                <i class="bi bi-twitter"></i>
+            </a>
+            <a href="mailto:amwufiv@gmail.com" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-envelope-fill"></i>
+            </a>
+            <a href="https://github.com/amwufiv" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+        
+        <!-- <div class="copyright">
+            <span> Copyright © 2023 ufiv </span>
+        </div> -->
+        
+    </div>
+</body>
+</html>

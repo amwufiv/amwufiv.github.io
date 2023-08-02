@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="https://blog.ufiv.org/atom.xml" rel="self" type="application/atom+xml" /><link href="https://blog.ufiv.org/" rel="alternate" type="text/html" /><updated>2023-08-03T00:04:36+08:00</updated><id>https://blog.ufiv.org/atom.xml</id><title type="html">UFIV</title><subtitle>Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.</subtitle><entry><title type="html">港股和美股开户</title><link href="https://blog.ufiv.org/digital-nomad.html" rel="alternate" type="text/html" title="港股和美股开户" /><published>2023-06-27T23:43:03+08:00</published><updated>2023-06-27T23:43:03+08:00</updated><id>https://blog.ufiv.org/digital-nomad</id><content type="html" xml:base="https://blog.ufiv.org/digital-nomad.html"><![CDATA[<p>最近准备把基金里的钱取出来买港股和美股的股票，有几个原因，一是被基金坑了太多钱了，我觉得这基金和A股我是一点都看不懂，倒不是说预测不了，而是说做后验时都找不到原因🥹，二是最近汇率掉太多了，由于日常会买一些外网的服务，这就相当于我的购买力一直在下降🥹，所以有必要做一些其它货币的配置。这一段时间终于把账户申请下来了，中间有一些曲折，写一篇博客记录下。</p>
+<h3 id="银行卡">银行卡</h3>
+<p>查了很多别人的开户经验，趁端午节去香港开了汇丰和渣打的银行卡。去之前还专门查了google map 和高德地图上银行是否营业，显示营业就直接去了，结果端午节当天银行放假，没办法只能先玩一天再去办（假日的酒店是真贵）。第二天 9 点就到 <旺角汇丰银行大厦东> 这里的分行取号，但前面已经排了很多人，就先去了旺角 E1 出口那边的渣打银行办理开户，在渣打这边取号到开户完成大概只要一个多小时，会看地址证明，没有存款要求，中间会有业务经理过来给你介绍保险业务（重疾险确实挺有用的，回来考虑了下，决定后面找个时间再过去办理），然后去柜台拿卡，可以给人民币给柜员让他帮你转港币存到卡里，拿到卡后去楼下 ATM 激活就完成了。</旺角汇丰银行大厦东></p>
+
+<p>再回到汇丰这边还没排到，去吃了个饭逛了一圈等到下午过去还是没排到，一直到下午三点多才终于轮到。一个看着年经差不多的经理和我沟通，过程很轻松，一半的时间都在吹水，开卡也没有最低存款要求，最后拿到卡存 200 人民币就走了。</p>
+
+<p>由于来的时候没带太多钱又着急赶着回去，所有只取了少量的钱转成港币存到卡里。后面才知道应该提前取些钱，因为后面发现国内的银行电汇的手续费太高。</p>
+
+<p>开通了银行卡后可以在官网申请对应的 mastercard 消费卡，我在 HSBC HK APP 上申请了，因为购买一些商品服务会限制你只能使用 mastercard ，所以有一张会方便一点。</p>
+
+<h3 id="证券开户">证券开户</h3>
+<p>去香港也带了身份证，所以直接在香港开了富途的账号，比较简单，但这里不得不说下富途的官网上写了一世免佣我以为是我开的账户是免佣金，但后面交易的时候发现有万分之三的佣金（有一行小字说一世免佣在细则条件下，但找了半天都找不到对应的细则）。打客服电话过去质问，客服吱吱唔唔说是香港居民才免佣，确实是大陆公司刻在 DNA 的老传统了。
+虽然富途开了美股的账号，但是佣金太高了，而且我觉得如果投资美股，那就不要把资金都放在大陆的公司，即使公司可信，政策制定者也不可信，昨天尚能在大陆投资，今天尚能在香港投资，明天..我们应该悲观地预测明天。</p>
+
+<p>美股的券商我开了两家，Firstrade 和 TDAmeritrade，都是 0 佣金，因为这两家都是支持非美国人开户的，所以可以直接在官网填写申请。Firstrade 因为是华人老板中文化比较好，而且开户特别快，只在中间邮件反馈过重填一个地址，重填后当天就开通了。TDAmeritrade 是第二大券商填的资料很多，审核也很严格，前后大概走了两周多的时间，而且都是美东下午邮件反馈我第二天才能看到，反馈的Issue 也跟我填写的资料不一样，最后直接电话给客服让她重新给我确认一遍，又到了下周才邮件反馈开通成功。</p>
+
+<p>开通完之后我才在油管搜索了相关的<a href="https://www.youtube.com/watch?v=gw195PTBdr8">视频</a>，建议后面新开户的都应该先看一看了解一下。</p>
+
+<h3 id="入金出金">入金&amp;出金</h3>
+<p>最后就是入金和出金了。港股的入金可以先从内地银行卡 APP 上电汇，但手续费太高。我是直接用熊猫速汇汇款到汇丰账号，没有外汇限制，手续费是固定 80，汇率和汇丰比是差 0.007。也可以另外找熟人或公司同事买折损会少一些。因为富途直接绑港卡，入金后续操作和出金就比较简单了。</p>
+
+<p>美股的入金比较麻烦，一是先购买外汇，先在 HSBC 上购买美元外汇，上面的汇率我觉得还是比较合理。因为没有美国的银行卡，不能在券商 APP 里直接绑卡，只能通过电汇的方式入金，但手续费 25$，还不包括中间银行的手续费。目前找到比较好的方案是用 wise 中转，在 wise 开通账号后会给你一个美国的银行账户（与小众银行合作的卡，只用来中转不用担心），你可以通过在证券 APP 上绑定 ACH 账户来入金，中间只有很低的手续费。但 wise 要求你绑定的扣款银行卡是 mastercard ，而我的卡还在路上，所以等后面实际操作后再作更新。出金也同理。</p>
+
+<h3 id="题外">题外</h3>
+<p>疫情之后第一次去香港，明显感觉到香港对待普通话游客似乎更加友好了，不知是不是我的错觉。就我的观察和体会，香港人的服务态度确实特别好，在银行或者是店里都能见到上了年纪的老人在消费或办业务，服务人员一般都表现得很有耐心和友善，我觉得这应该不只是职业培训出来的，而是社会文化和教育熏染的。像火警在路上为倒地的老人包扎，在看地图旁边的人给我指路，坐轮椅的人时不时穿插在来来往往的行人中，都让我感觉到这里的人活得都很体面，很有尊严，每个人都能得到基本的尊重，真好啊。</p>]]></content><author><name></name></author><category term="jekyll" /><category term="update" /><category term="数字游民" /><summary type="html"><![CDATA[最近准备把基金里的钱取出来买港股和美股的股票，有几个原因，一是被基金坑了太多钱了，我觉得这基金和A股我是一点都看不懂，倒不是说预测不了，而是说做后验时都找不到原因🥹，二是最近汇率掉太多了，由于日常会买一些外网的服务，这就相当于我的购买力一直在下降🥹，所以有必要做一些其它货币的配置。这一段时间终于把账户申请下来了，中间有一些曲折，写一篇博客记录下。 银行卡 查了很多别人的开户经验，趁端午节去香港开了汇丰和渣打的银行卡。去之前还专门查了google map 和高德地图上银行是否营业，显示营业就直接去了，结果端午节当天银行放假，没办法只能先玩一天再去办（假日的酒店是真贵）。第二天 9 点就到 这里的分行取号，但前面已经排了很多人，就先去了旺角 E1 出口那边的渣打银行办理开户，在渣打这边取号到开户完成大概只要一个多小时，会看地址证明，没有存款要求，中间会有业务经理过来给你介绍保险业务（重疾险确实挺有用的，回来考虑了下，决定后面找个时间再过去办理），然后去柜台拿卡，可以给人民币给柜员让他帮你转港币存到卡里，拿到卡后去楼下 ATM 激活就完成了。]]></summary></entry><entry><title type="html">装修Blog与Terminal</title><link href="https://blog.ufiv.org/beautify-your-blog-and-terminal.html" rel="alternate" type="text/html" title="装修Blog与Terminal" /><published>2021-08-12T22:49:00+08:00</published><updated>2021-08-12T22:49:00+08:00</updated><id>https://blog.ufiv.org/beautify-your-blog-and-terminal</id><content type="html" xml:base="https://blog.ufiv.org/beautify-your-blog-and-terminal.html"><![CDATA[<p>最近打开了好久没更新的博客，感觉已经有点破败不堪。自从上次在hexo上尝试把org的文件转成渲染好的html文件失败劝退后再没打理过。最近几天顺手和终端一起翻新了下，这里主要记录下我的blog和terminal的配置过程。</p>
+<h3 id="terminal">Terminal</h3>
+<p>mac的终端我主要是用 Alacritty + oh my zsh + tmux.</p>
+
+<p>Alacritty 使用 rust 开发，体验下来真的很快。支持自定义快捷键和 vi mode，需要从头开始配置，但配置项较少。everforest_dark 主题 + RobotoMono 字体。prompt 使用 starship，只改了 git 的几个配置。</p>
+
+<p>tmux可以参考<a href="https://github.com/amwufiv/dotfiles/tree/master/tmux">我的配置</a>, 如果Ctrl 和 Caps 没有互换的话可能需要修改下prefix，但我强烈建议互换Ctrl 和 Caps（用过都说好）。插件主要使用tmux-continuum来自动保存恢复session，是的电脑重启的话session会丢失 :(，当然也不是完美恢复，比如ssh连接无法找回。tmux-colortag插件主要用来给window tab着色，由于插件没提供显式指定color的配置项，因此如果要指定每个window的颜色的话，可以直接修改插件中的name2color.py脚本，顺便修改下根据id哈希选色。</p>
+
+<p>自从放弃iterm的分屏快捷键，整个人都好起来了XD，最后效果：
+<img src="https://cdn.staticaly.com/gh/amwufiv/img_host@master/xxx/2023-06-29_23-24-51.59nwk9okju80.jpg" alt="terminal" /></p>
+
+<h3 id="blog">Blog</h3>
+<p>blog没有使用主题，主要参考了<a href="https://feross.org/">Feross的博客</a>，这种简洁的风格和配色真的是太赞了！我感觉不用怎么改就是我审美中理想的blog了(还是加了点页脚和代码高亮)。
+首先是从hexo迁移到Jekyll，因为hexo设计之初就是为了优化Jekyll的速度，所以两者结构配置我感觉都没什么区别，学习成本大概就是要了解一下ruby。</p>
+
+<p>由于post和postlist主要是参考上述blog，详细参见_sass/style.scss。tag自动生成用ruby写了一个还是比较简单。字体比较推荐NotoSansCJK。代码高亮一在config配置hightlighter，二通过<code class="language-plaintext highlighter-rouge">rougify style github &gt; github.css</code> 生成想要的主题样式然后import即可。</p>
+
+<p>部署时发现github已经支持了自定义域名的https证书，真不错！然而部署完发现自定义的plugins ghpages不支持，github只支持<a href="https://pages.github.com/versions/">很少的几个插件</a>，解决方案可以自己站点部署(还要安装nginx、Lets Encrypt、ruby env等比较麻烦)，拉个分支本地直接build push，推荐用github action 定时自动build。</p>]]></content><author><name></name></author><category term="tools" /><summary type="html"><![CDATA[最近打开了好久没更新的博客，感觉已经有点破败不堪。自从上次在hexo上尝试把org的文件转成渲染好的html文件失败劝退后再没打理过。最近几天顺手和终端一起翻新了下，这里主要记录下我的blog和terminal的配置过程。 Terminal mac的终端我主要是用 Alacritty + oh my zsh + tmux.]]></summary></entry><entry><title type="html">Scala中的CanBuildFrom</title><link href="https://blog.ufiv.org/canbuildfrom.html" rel="alternate" type="text/html" title="Scala中的CanBuildFrom" /><published>2018-07-03T15:18:03+08:00</published><updated>2018-07-03T15:18:03+08:00</updated><id>https://blog.ufiv.org/canbuildfrom</id><content type="html" xml:base="https://blog.ufiv.org/canbuildfrom.html"><![CDATA[<p>了解CanBuildFrom主要还是因为我对Traversable能够正确处理Option上下文感到很不解（如下），List的flatMap函数能够正确拆掉Option上下文变成(2,3,4)，要知道Option也只是简单继承了两个与之无关的特质Product<sup id="fnref:Product" role="doc-noteref"><a href="#fn:Product" class="footnote" rel="footnote">1</a></sup>和Serializable，为何flatMap能够正确识别Option呢？</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">List</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span><span class="mi">2</span><span class="o">,</span><span class="mi">3</span><span class="o">).</span><span class="py">flatMap</span><span class="o">(</span><span class="n">x</span><span class="k">=&gt;</span><span class="nc">Some</span><span class="o">(</span><span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="o">))</span>
+<span class="c1">//res2: List[Int] = List(2, 3, 4)</span>
+</code></pre></div></div>
+<p>看一下List的flatMap函数签名：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">final</span> <span class="k">override</span> <span class="k">def</span> <span class="nf">flatMap</span><span class="o">[</span><span class="kt">B</span>, <span class="kt">That</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="nc">GenTraversableOnce</span><span class="o">[</span><span class="kt">B</span><span class="o">])(</span><span class="k">implicit</span> <span class="n">bf</span><span class="k">:</span> <span class="kt">CanBuildFrom</span><span class="o">[</span><span class="kt">List</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span>, <span class="kt">B</span>, <span class="kt">That</span><span class="o">])</span><span class="k">:</span> <span class="kt">That</span>
+</code></pre></div></div>
+<p>flatMap函数要求f是一个返回继承GenTraversableOnce特质的函数，那为什么能够返回Option呢，查看编译时的类型变换，发现原来存在一个隐式转换将Option转换成了Iterable：implicit def option2Iterable<a href="xo: Option[A]">A</a>: Iterable[A]。该隐式转换函数调用了toList方法将Option转换成了List,所以也就符合了f的函数签名，因为Some(x+1)被隐式转换成了List(x+1)。接下来就比较容易理解了，flatMap函数将具有traversable能力的上下文‘扁平化’，实现上是调用了seq统一将变成seq。</p>
+
+<p>所以说隐式转换虽然能够帮助我们开发更灵活的代码，但也加大了我们去理解别人代码的困难，这点在理解后面String的map函数中更有体会。</p>
+
+<h2 id="canbuildfrom">CanBuildFrom</h2>
+<p>那么CanBuildFrom又是什么呢，仔细看List的map和flatMap函数签名，发现它们都声明了一个隐式的CanBuildFrom参数bf。这个参数是用来干什么的呢，查看CanBuildFrom源码，发现bf主要是用来构建Builder的（通过构造函数）。</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">trait</span> <span class="nc">CanBuildFrom</span><span class="o">[</span><span class="kt">-From</span>, <span class="kt">-Elem</span>, <span class="kt">+To</span><span class="o">]</span> <span class="o">{</span>
+
+  <span class="cm">/** Creates a new builder on request of a collection.
+   *  @param from  the collection requesting the builder to be created.
+   *  @return a builder for collections of type To with element type Elem.
+   *          The collections framework usually arranges things so
+   *          that the created builder will build the same kind of collection
+   *          as from.
+   */</span>
+  <span class="k">def</span> <span class="nf">apply</span><span class="o">(</span><span class="n">from</span><span class="k">:</span> <span class="kt">From</span><span class="o">)</span><span class="k">:</span> <span class="kt">Builder</span><span class="o">[</span><span class="kt">Elem</span>, <span class="kt">To</span><span class="o">]</span>
+
+  <span class="cm">/** Creates a new builder from scratch.
+   *
+   *  @return a builder for collections of type To with element type Elem.
+   *  @see scala.collection.breakOut
+   */</span>
+  <span class="k">def</span> <span class="nf">apply</span><span class="o">()</span><span class="k">:</span> <span class="kt">Builder</span><span class="o">[</span><span class="kt">Elem</span>, <span class="kt">To</span><span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+<p>例如通过map函数，理论上我们能够将List[Int]构建成Seq[String],即根据需要返回合适的集合类型。通过bf()构建的builder，构造封装B的集合。有趣的是List中的map函数居然没有使用bf的builder，而还是自己实现构造了新的List，所以通过List.map还是转换成了List。
+而对于String的map函数(其实不是String而是StringOps的map函数),当f函数将字符串中每个字符转换成Int时，map函数会返回IndexedSeq类型集合，而如果f函数只是将字符作大写化处理时，map函数仍然会返回String。</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="s">"abc"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toInt</span><span class="o">)</span> 
+<span class="c1">//res4: scala.collection.immutable.IndexedSeq[Int] = Vector(97, 98, 99)</span>
+<span class="s">"abc"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)</span> 
+<span class="c1">//res5: String = ABC</span>
+</code></pre></div></div>
+<p>这是如何实现的呢？原来在Predef中定义了两个隐式方法/参数fallbackStringCanBuildFrom和StringCanBuildFrom,将f函数返回Char时会使用StringCanBuildFrom作为map的隐式参数，而f函数返回非Char时则会调用fallbackStringCanBuildFrom隐式方法。</p>
+
+<p>对于map，flatMap等函数，我们都可以通过传递cbf来构建合适的上下文，尽管函数签名比较让人难以理解。而在<a href="https://scala-lang.org/blog/2017/05/30/tribulations-canbuildfrom.html">官方的说明中</a>，已经考虑将CanBuildFrom这种晦涩难懂且不雅观的构建方式摒弃掉，通过使用map重载的方式实现目前的map函数。</p>
+
+<h3 id="构建一个自己bf">构建一个自己bf</h3>
+<p>那我们有没有办法将“hunter”.map(_.toUpper)也返回indexedSeq呢？当然可以，最简单的我们可以直接显式调用fallbackStringCanBuildFrom：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">val</span> <span class="nv">s1</span> <span class="k">=</span> <span class="s">"hunter"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)(</span><span class="n">fallbackStringCanBuildFrom</span><span class="o">)</span>
+</code></pre></div></div>
+<p>如果了解map的构造方式后我们也可以构造自己的CanBuildFrom：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">object</span> <span class="nc">Temp</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="nf">main</span><span class="o">(</span><span class="n">args</span><span class="k">:</span> <span class="kt">Array</span><span class="o">[</span><span class="kt">String</span><span class="o">])</span><span class="k">:</span> <span class="kt">Unit</span> <span class="o">=</span> <span class="o">{</span>
+
+
+
+    <span class="k">val</span> <span class="nv">myBF</span><span class="k">:</span> <span class="kt">CanBuildFrom</span><span class="o">[</span><span class="kt">String</span>, <span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">CanBuildFrom</span><span class="o">[</span><span class="kt">String</span>, <span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]</span> <span class="o">{</span>
+      <span class="k">def</span> <span class="nf">apply</span><span class="o">(</span><span class="n">from</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="nf">apply</span><span class="o">()</span>
+      <span class="k">def</span> <span class="nf">apply</span><span class="o">()</span>             <span class="k">=</span> <span class="k">new</span> <span class="nc">MyBuilder</span>
+    <span class="o">}</span>
+    <span class="k">val</span> <span class="nv">s</span> <span class="k">=</span> <span class="s">"hunter"</span>
+    <span class="k">val</span> <span class="nv">l</span> <span class="k">=</span> <span class="nv">s</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)(</span><span class="n">myBF</span><span class="o">)</span>
+    <span class="nf">println</span><span class="o">(</span><span class="n">l</span><span class="o">)</span>
+    <span class="c1">// l is List(H, U, N, T, E, R)</span>
+
+
+  <span class="o">}</span>
+
+
+
+<span class="o">}</span>
+
+<span class="k">class</span> <span class="nc">MyBuilder</span><span class="o">(</span><span class="n">list</span><span class="k">:</span> <span class="kt">ListBuffer</span><span class="o">[</span><span class="kt">Char</span><span class="o">])</span> <span class="k">extends</span> <span class="nc">ReusableBuilder</span><span class="o">[</span><span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]{</span>
+  <span class="k">def</span> <span class="nf">this</span><span class="o">()={</span>
+    <span class="nf">this</span><span class="o">(</span><span class="k">new</span> <span class="nc">ListBuffer</span><span class="o">[</span><span class="kt">Char</span><span class="o">])</span>
+  <span class="o">}</span>
+
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">clear</span><span class="o">()</span><span class="k">:</span> <span class="kt">Unit</span> <span class="o">=</span> <span class="o">{</span>
+    <span class="nv">list</span><span class="o">.</span><span class="py">clear</span><span class="o">()</span>
+  <span class="o">}</span>
+
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">+=</span><span class="o">(</span><span class="n">elem</span><span class="k">:</span> <span class="kt">Char</span><span class="o">)</span><span class="k">:</span> <span class="kt">MyBuilder.this.</span><span class="k">type</span> <span class="o">=</span> <span class="o">{</span><span class="nv">list</span><span class="o">.</span><span class="py">append</span><span class="o">(</span><span class="n">elem</span><span class="o">);</span><span class="k">this</span><span class="o">}</span>
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">result</span><span class="o">()</span><span class="k">:</span> <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]</span> <span class="k">=</span> <span class="nv">list</span><span class="o">.</span><span class="py">toList</span>
+<span class="o">}</span>
+
+</code></pre></div></div>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:Product" role="doc-endnote">
+      <p>题外还有一个有趣的地方，上文讲到Option引入了特质Product，Product主要是实现productIterator从而实现向Iterator的转换。在我们声明的case class中，编译器会在编译过程中自动引入Product，所以每当我们声明case class时，总能调用productIterator方法来遍历各元素。 <a href="#fnref:Product" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>]]></content><author><name></name></author><category term="jekyll" /><category term="update" /><category term="scala" /><summary type="html"><![CDATA[了解CanBuildFrom主要还是因为我对Traversable能够正确处理Option上下文感到很不解（如下），List的flatMap函数能够正确拆掉Option上下文变成(2,3,4)，要知道Option也只是简单继承了两个与之无关的特质Product1和Serializable，为何flatMap能够正确识别Option呢？ List(1,2,3).flatMap(x=&gt;Some(x+1)) //res2: List[Int] = List(2, 3, 4) 看一下List的flatMap函数签名： final override def flatMap[B, That](f: A =&gt; GenTraversableOnce[B])(implicit bf: CanBuildFrom[List[A], B, That]): That flatMap函数要求f是一个返回继承GenTraversableOnce特质的函数，那为什么能够返回Option呢，查看编译时的类型变换，发现原来存在一个隐式转换将Option转换成了Iterable：implicit def option2IterableA: Iterable[A]。该隐式转换函数调用了toList方法将Option转换成了List,所以也就符合了f的函数签名，因为Some(x+1)被隐式转换成了List(x+1)。接下来就比较容易理解了，flatMap函数将具有traversable能力的上下文‘扁平化’，实现上是调用了seq统一将变成seq。 题外还有一个有趣的地方，上文讲到Option引入了特质Product，Product主要是实现productIterator从而实现向Iterator的转换。在我们声明的case class中，编译器会在编译过程中自动引入Product，所以每当我们声明case class时，总能调用productIterator方法来遍历各元素。 &#8617;]]></summary></entry></feed>
