@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css"></noscript>
+    <link rel="stylesheet" href="/css/main.css" />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <link rel="icon" type="image/png" href="/assets/icon/icon.png"/>
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-84264625-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-84264625-1');
+</script>
+    
+    <!-- todo -->
+</head>
+<body>
+    <div id="container">
+        <div id="content">
+            <header id="header">
+                <h1>
+                    <a href="/">UFIV</a>
+                </h1>
+            </header>
+            <section>
+                <div class="postHeader">
+    <h1 class="posttitle">
+        <a href="/spark-flow.html">spark执行流程</a>
+    </h1>
+
+    <div class="byline">
+        <span><a href="/about/">ufiv</a></span>
+        <time datetime="2023-06-08">2023-06-08</time>
+        <ul class="tags">
+            
+                <i class="bi bi-tags"></i>
+            
+
+            
+            <li><a href="/tag/spark/">spark</a></li>
+            
+        </ul>
+        
+        
+        
+    
+        
+    </div>
+</div>
+
+<post class="">
+    <h2 id="执行主流程">执行主流程</h2>
+<p><img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-flow.4b81ofynias0.png" alt="spark flow" /></p>
+
+<p>当 SQL 任务提交后，parser 会把 SQL 解析成 LogicalPlan，经过 Analyzer、Optimizer 和其它规则分析优化后得到执行计算 executePlan，调用 <code class="language-plaintext highlighter-rouge">queryExecuton.execute()</code>方法会得到 final rdd。当执行 rdd action 操作时，才开始提交 job 给 DAGScheduler， scheduler 按照 rdd llineage 将 job 拆分成stagte 并根据依赖顺序提交，在 submitStage 阶段又会生成具体执行的 tasks，并成生一个新的 taskManager 管理，当 backend 需要新的任务时，taskManager 负责分配 task 给 executor（只分配不分发</p>
+
+<h2 id="生成逻辑执行计划">生成逻辑执行计划</h2>
+<p>当任务提交后，SQL 通过 parser 得到 LogicalPlan，但这只是逻辑上的计划，它是未经校验的，缺少表字段元数据。Analyzer 会对 LogicalPlan 做遍历，分析规则很多，具体可细看 <code class="language-plaintext highlighter-rouge">org.apache.spark.sql.catalyst.analysis.Analyzer</code> 的代码，下面举几个例子</p>
+<ul>
+  <li>CTESubstitution
+    <blockquote>
+      <p>将所有 with clause 表别名在 SQL 的引用替换成实际的查询，纯粹的替换，对性能的优化为 0。（起码在 spark 2.x 中，对于复杂查询，不应该把复杂子查询直接写成 CTE 在 SQL 中多处引用）</p>
+    </blockquote>
+  </li>
+  <li>ResolveFunctions
+    <blockquote>
+      <p>校验函数是否存在，并将函数引用解析成对应的函数表达式</p>
+    </blockquote>
+  </li>
+  <li>TypeCoercion.typeCoercionRules
+    <blockquote>
+      <p>类型的隐式转换，在前面的文章中也有介绍</p>
+    </blockquote>
+  </li>
+</ul>
+
+<h2 id="生成物理执行计划">生成物理执行计划</h2>
+<h3 id="优化">优化</h3>
+<p>得到分析后的 LogicalPlan 后，<code class="language-plaintext highlighter-rouge">SparkOptimizer</code> 会对其进行优化，和 Analyzer 一样也会应用多个规则，具体可细看 <code class="language-plaintext highlighter-rouge">org.apache.spark.sql.execution.SparkOptimizer</code> 的代码，下面举几个例子</p>
+<ul>
+  <li>RewriteDistinctAggregates
+    <blockquote>
+      <p>消除 distinct：以「distinct 字段 + 分组字段」为 key 拆分出多个 group by，不同 key 和非 distinct 查询字段会生成不同的 gid，再 expand 出多份对应 gid 的数据。SQL 中不同字段的 distinct 越多，expand 出来的数据翻的倍数越多（这里可能有性能问题）</p>
+    </blockquote>
+  </li>
+  <li>PushProjectionThroughUnion
+    <blockquote>
+      <p>将字段查询下推给 UNION ALL 子查询</p>
+    </blockquote>
+  </li>
+  <li>RewritePredicateSubquery
+    <blockquote>
+      <p>将 exists / in 条件中的子查询转化为 left semi join（not exists / not in 则转化为 left anti join）</p>
+    </blockquote>
+  </li>
+</ul>
+
+<p>最终得到优化后的 LogicalPlan。</p>
+
+<h3 id="转换成-executeplan">转换成 executePlan</h3>
+<p>优化后的 LogicalPlan 最后经过 <code class="language-plaintext highlighter-rouge">SparkPlanner</code> 的 strategies（将各类型的 plan 转成对应的 exec）处理，得到可执行的 SparkPlan。以 group by SQL 为例，<code class="language-plaintext highlighter-rouge">select column from table</code> 会映射成 Project，group by 聚合会生成 Aggregate；因为 SQL 中用的是支持部分聚合的函数 sum、max，所以会有两个 Aggregate——先在分区内做局部聚合减少数据量，再 Exchange shuffle 后执行一次最终聚合。</p>
+
+<!-- TODO: 补 group by 的 executePlan 截图 -->
+
+<p>spark 任务启动时执行计划也会打印在 driver 日志中，有时可以据此判断开发的 SQL 是否合理。</p>
+
+<h2 id="生成-rdd">生成 RDD</h2>
+<p>得到 SparkPlan 后，调用 <code class="language-plaintext highlighter-rouge">execute()</code> 即可执行并生成 RDD。大概逻辑是：最底层的 TableScan 转化为最原始的 ScanRDD，每个上层计划在子 RDD 的基础上执行操作（如 <code class="language-plaintext highlighter-rouge">mapPartitions(mapFunc)</code>）产生新的 RDD，如此 transform up 得到最终的 RDD。</p>
+
+<!-- TODO: explain codegen & shuffle exchange -->
+
+<h2 id="生成-stage">生成 Stage</h2>
+<p>最终 RDD 在调用 action 方法时，会向 DAGScheduler 提交 job，scheduler 根据 final RDD 的血缘（lineage）和 partition 依赖，追溯并划分不同的 stage。当子 RDD 与父 RDD 之间的依赖是 ShuffleDependency 时，子 RDD 就要拆分出新的 stage。</p>
+
+<h2 id="生成-tasks">生成 Tasks</h2>
+<p>提交 stage 时会同时生成该 stage 的 tasks 并向 taskScheduler 提交，同时广播任务执行代码。创建 task 时会附带 RDD partition 的 locs 信息，为之后按 locality 优先级分配任务提供依据；locs 由每个 RDD 的 <code class="language-plaintext highlighter-rouge">getPreferredLocations</code> 计算得到。</p>
+
+<h2 id="tasks-分配">Tasks 分配</h2>
+<p>tasks 的分配在之前的文章中已有描述，这里不再展开。</p>
+
+</post>
+
+
+            </section>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="social">
+            <a href="https://twitter.com/amufiv" target="_blank" rel="noopener noreferrer"">
+                <i class="bi bi-twitter"></i>
+            </a>
+            <a href="mailto:amwufiv@gmail.com" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-envelope-fill"></i>
+            </a>
+            <a href="https://github.com/amwufiv" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+        
+        <!-- <div class="copyright">
+            <span> Copyright © 2026 ufiv </span>
+        </div> -->
+        
+    </div>
+</body>
+</html>

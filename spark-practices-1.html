@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css"></noscript>
+    <link rel="stylesheet" href="/css/main.css" />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <link rel="icon" type="image/png" href="/assets/icon/icon.png"/>
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-84264625-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-84264625-1');
+</script>
+    
+    <!-- todo -->
+</head>
+<body>
+    <div id="container">
+        <div id="content">
+            <header id="header">
+                <h1>
+                    <a href="/">UFIV</a>
+                </h1>
+            </header>
+            <section>
+                <div class="postHeader">
+    <h1 class="posttitle">
+        <a href="/spark-practices-1.html">spark调优1-节点动态伸缩</a>
+    </h1>
+
+    <div class="byline">
+        <span><a href="/about/">ufiv</a></span>
+        <time datetime="2022-09-17">2022-09-17</time>
+        <ul class="tags">
+            
+                <i class="bi bi-tags"></i>
+            
+
+            
+            <li><a href="/tag/spark/">spark</a></li>
+            
+        </ul>
+        
+        
+        
+    
+        
+    </div>
+</div>
+
+<post class="">
+    <h2 id="现象">现象</h2>
+<p>前几天同事反馈有个任务执行时间特别长，跑了几个小时还没出来。看了下 SQL 逻辑发现很简单只是查询过滤了几个上报埋点做 group by sum，实例却一直跑不出来。</p>
+
+<p>将 SQL 复制出来执行同样特别慢。到 ui 界面查看执行情况，发现一开始有 1000 多个executor 但执行完几百个 task 后 executor 开始慢慢被 killed，最后活跃的 executor 掉到个位数。只有几个节点在计算几万个 task 的 stage，难怪会一直跑不出来。
+<img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-practice-1-1.39daz1ozvtc0.png" alt="ui" /></p>
+
+<h2 id="排查过程">排查过程</h2>
+<p>首先从被杀掉的节点查询日志，发现都是在执行完任务 20 - 30s 后被 kill，有些甚至任务都没执行就终止了。
+<img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-practice-1-3.7dpzq5sj1wc0.png" alt="kill log" /></p>
+
+<p>再看 driver 日志，发现里面也有记录节点被 kill 日志。
+<img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-practice-1-2.6hd9f5zk9n40.png" alt="driver log" />
+<code class="language-plaintext highlighter-rouge">ExecutorAllocationManager</code> 打印的日志，因为我们的集群是默认开启动态伸缩的，看 <code class="language-plaintext highlighter-rouge">spark.dynamicAllocation.executorIdleTimeout</code> 执行节点超时时间的配置项值确实是 20s。所以问题是 1000 多个 executor 为什么刚创建出来闲置了 20s 而没有分配到任务呢。先尝试把闲置超时配置项改为 600s，重新执行验证确实正常执行了，监控分配启动了 1000 多个 executor 在执行。但遗留了两个问题：</p>
+<ol>
+  <li>为什么闲置的节点没有分配到任务？</li>
+  <li>节点是动态伸缩的，闲置的节点被杀掉后为何没有再动态扩容，总共还有 5 万多个 task 嗷嗷待哺呢？</li>
+</ol>
+
+<h2 id="程序执行逻辑">程序执行逻辑</h2>
+<p>我们可以看下 spark 代码的执行逻辑。可以看到有一个 <code class="language-plaintext highlighter-rouge">ExecutorAllocationManager</code> 专门负责执行节点的调整，具体是注册了 listener 监听 stage 和 task 的执行、监听 executor 的变化，并派生一个守护线程定时计算是否需要了增加执行节点，清理闲置节点也在守护进程中执行。首先 manager 有一个变量 <code class="language-plaintext highlighter-rouge">numExecutorsTarget</code> 专门记录累计申请的节点数据，初始值为 <code class="language-plaintext highlighter-rouge">spark.dynamicAllocation.initialExecutors</code>，定时任务会先计算等待执行和正在执行的任务数（这里默认一个节点设置 1 个核心），如果等待执行任务数 &gt; <code class="language-plaintext highlighter-rouge">numExecutorsTarget</code> 那以前一轮申请的节点数＊2 向集群申请新执行节点，第一轮申请节点数为 1，直到 <code class="language-plaintext highlighter-rouge">numExecutorsTarget = spark.dynamicAllocation.maxExecutors</code>。</p>
+
+<p><strong>这里的问题是当 <code class="language-plaintext highlighter-rouge">numExecutorsTarget</code> 达到最大时就不会再去向 yarn 发起资源请求，即使之前申请过的节点被杀掉了，这就是闲置的节点被杀掉后没有扩容的原因。</strong></p>
+
+<p>再看任务分配的逻辑，spark 由 <code class="language-plaintext highlighter-rouge">TaskScheduleImpl</code> 来分配任务，又是调用 <code class="language-plaintext highlighter-rouge">TaskSetManager#resourceOffer</code> 来实现。可以理解具体的任务分配逻辑是这样的：</p>
+<ol>
+  <li>将所有可用 executor shuffle 打乱并挨个调用 <code class="language-plaintext highlighter-rouge">resourceOffer</code> 方法来分配任务。</li>
+  <li>某个 executor 是否能分配到任务最主要的影响因素就是待执行任务的 locality 优先级，优先按任务的 locality 优先级分配，依次为 <code class="language-plaintext highlighter-rouge">PROCESS_LOCAL -&gt; NODE_LOCAL -&gt; NO_PREF -&gt; RACK_LOCAL -&gt; ANY</code>。<strong>优先级高的任务都分配完才会分配下一个优先级的任务。</strong></li>
+  <li>locality 优先级也不是绝对一定要分配完任务才降级，因为存在某些场景如 node_local 的节点失败太多被列入黑名单都分配不了，taskManager 分配任务的时间超过了<code class="language-plaintext highlighter-rouge">spark.locality.wait.node</code>还是会临时降级给 executor 分配 rack_local 任务。</li>
+</ol>
+
+<p>那么我们回头看下之前失败任务 driver 的日志，会发现在节点被 killed 前，taskManager 一直在分配 node_local 任务给其它节点，有任务被分配那最后一个分配时间也会一直刷新，也就不会超过<code class="language-plaintext highlighter-rouge">spark.locality.wait.node</code>，导致没有 node_local 任务执行节点一直闲置获取不到任务，最后被杀掉。</p>
+
+<p>任务的优先级是如何定义的？
+添加任务时会把任务做归类，如果一个任务数据的 host 也有执行的 executor 在跑那这个任务会被加到 node_pending_tasks 队列。因为集群没有机架信息，所以实际任务默认会添加到 rack_local_pending_tasks 队列。</p>
+
+<h2 id="优化">优化</h2>
+<p>根据上面分析的原因，我们可以优化的配置项有：</p>
+<ol>
+  <li>将闲置超时时间改长 <code class="language-plaintext highlighter-rouge">set spark.dynamicAllocation.executorIdleTimeout=600s</code>;</li>
+  <li>将读取同节点数据的超时时间设置为0 <code class="language-plaintext highlighter-rouge">set spark.locality.wait.node=0</code>;</li>
+</ol>
+
+<p>但如上面所说，如果修改闲置时间过长，因为 spark task 分配优先级的机制，在 node_local tasks 跑完前虽然节点没有被杀掉但大部分基本处于闲置状态，浪费集群资源。</p>
+
+<p>实际测试发现，如果跳过 node_local 的分配优先级执行时间会更快，基本所有的节点都能够立即获取任务并执行。虽然跨机器读取数据会有网络延迟及带宽限制，但在今天几十T的数据都能在百ms内跨过太平洋到达西海岸，何况是内部的计算集群。实际看执行日志读取一个 rack_local 的任务数据并计算完成也只花了 2s。</p>
+
+<h2 id="结果">结果</h2>
+<p>修改配置后基本 10min 跑完任务。</p>
+
+
+</post>
+
+
+            </section>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="social">
+            <a href="https://twitter.com/amufiv" target="_blank" rel="noopener noreferrer"">
+                <i class="bi bi-twitter"></i>
+            </a>
+            <a href="mailto:amwufiv@gmail.com" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-envelope-fill"></i>
+            </a>
+            <a href="https://github.com/amwufiv" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+        
+        <!-- <div class="copyright">
+            <span> Copyright © 2026 ufiv </span>
+        </div> -->
+        
+    </div>
+</body>
+</html>

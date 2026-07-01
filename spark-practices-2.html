@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css"></noscript>
+    <link rel="stylesheet" href="/css/main.css" />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <link rel="icon" type="image/png" href="/assets/icon/icon.png"/>
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-84264625-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-84264625-1');
+</script>
+    
+    <!-- todo -->
+</head>
+<body>
+    <div id="container">
+        <div id="content">
+            <header id="header">
+                <h1>
+                    <a href="/">UFIV</a>
+                </h1>
+            </header>
+            <section>
+                <div class="postHeader">
+    <h1 class="posttitle">
+        <a href="/spark-practices-2.html">spark调优2-类型隐式转换</a>
+    </h1>
+
+    <div class="byline">
+        <span><a href="/about/">ufiv</a></span>
+        <time datetime="2023-02-15">2023-02-15</time>
+        <ul class="tags">
+            
+                <i class="bi bi-tags"></i>
+            
+
+            
+            <li><a href="/tag/spark/">spark</a></li>
+            
+        </ul>
+        
+        
+        
+    
+        
+    </div>
+</div>
+
+<post class="">
+    <h2 id="问题">问题</h2>
+<p>业务反馈看板的数据存在缺失，查看看板对应的数据链路，发现中间有一张 dws 表数据缺失了，看该表的任务是正常执行。比对任务脚本 SQL 及执行日志发现，原因是出在一个条件判断，业务逻辑上我们需要过滤出 uid &gt; 10000 的正常数据，但查询的数据底表刚好 uid 字段为 string 类型。在 spark 中优化后的 SQL 却变成了 <code class="language-plaintext highlighter-rouge">CAST(uid AS INT) &gt; 10000</code>，而 uid 在数值范围上是有可能大于 2^31-1 的，这一部分超出 int 范围的数据因为转换后溢出成负数而使条件判断为 false 被过滤掉。</p>
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+    <span class="o">*</span>
+<span class="k">from</span>
+    <span class="n">table_t</span>
+<span class="k">where</span>
+    <span class="n">date_par</span> <span class="o">=</span> <span class="mi">19700101</span>
+    <span class="k">and</span> <span class="n">uid</span> <span class="o">&gt;</span> <span class="mi">10000</span>
+</code></pre></div></div>
+
+<h2 id="类型转换的逻辑">类型转换的逻辑</h2>
+<p>这里我们可以看一下 spark 中涉及到类型隐式转换的几个处理规则。</p>
+<ol>
+  <li>在 IN 条件判断中，将每个元素转换成同一更宽类型 <code class="language-plaintext highlighter-rouge">findWiderCommonType</code></li>
+  <li>表间的 UNION、INTERSECT、DISTINCT 集合操作同样为 <code class="language-plaintext highlighter-rouge">findWiderCommonType</code></li>
+  <li>算术表达式中的 string 类型转换（含比较操作）：
+    <ol>
+      <li>数据类的计算统一转换成 double，比如 <code class="language-plaintext highlighter-rouge">1 + '1234'</code>,<code class="language-plaintext highlighter-rouge">sum(col@string)</code></li>
+      <li>时间类型的判断统一转换成 string，比如 <code class="language-plaintext highlighter-rouge">2022-01-01@DATE = col@string</code></li>
+    </ol>
+  </li>
+  <li>decimal 间的操作，优先取最大的 scale 和最小的 precision（和整数类型的字段比较不存在精度问题）</li>
+  <li>bool 等值比较，转成与非 bool 值字段相同类型（只限于数值类型），true 为 1，false 为 0。</li>
+  <li>case when then 与 else 分支的类型转换 <code class="language-plaintext highlighter-rouge">findWiderCommonType</code>/<code class="language-plaintext highlighter-rouge">foldLeft(NULL)(findWiderTypeForTwo)</code></li>
+  <li>在 if 条件判断中的类型转换 <code class="language-plaintext highlighter-rouge">findWiderTypeForTwo</code></li>
+  <li>与期望类型的转换，在函数中我们往往会传一些非函数签名类型的参数，在 spark analyzer 中会尝试将所给的参数向目标类型转换。
+    <blockquote>
+      <p>findWiderTypeForTwo 规则：</p>
+      <ol>
+        <li>decimal 与整数类型转化成 decimal</li>
+        <li>decimal 与浮点数类型统一转化成 double</li>
+        <li>数字类型按 byte -&gt; short -&gt; integer -&gt; long -&gt; float -&gt; double 优先级提升</li>
+        <li>时间类型统一转化为 timestamp</li>
+        <li>当类型中有 string 而其它非 bool 和 binary 的原子类型时，统一转化为 string</li>
+      </ol>
+    </blockquote>
+  </li>
+</ol>
+
+<p>当无法满足上述转换规则则报错。</p>
+
+<h2 id="结论">结论</h2>
+<p>实际上按照上述转换规则 uid 字段应该是转换成 double 才对，拉取代码到本地验证也确实如此，这里猜测不一致应该是线上运行的框架有加载其它的规则或改动。</p>
+
+<p>当然这里只讨论 spark 的转换，每个引擎都有各自的一套逻辑，规则存在差异，特别是现在平台都把所有执行引擎封装在背后，因此不要期望我们直觉所想的在任务中会得到我们期望的结果，避免这类问题的最好方法就是不要让它发生：</p>
+<ol>
+  <li>对于业务同一个字段始终统一类型，并在底层处理好。</li>
+  <li>需要对两个不同类型的字段做操作时，显式地使用 cast 转换。</li>
+</ol>
+
+</post>
+
+
+            </section>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="social">
+            <a href="https://twitter.com/amufiv" target="_blank" rel="noopener noreferrer"">
+                <i class="bi bi-twitter"></i>
+            </a>
+            <a href="mailto:amwufiv@gmail.com" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-envelope-fill"></i>
+            </a>
+            <a href="https://github.com/amwufiv" target="_blank" rel="noopener noreferrer">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+        
+        <!-- <div class="copyright">
+            <span> Copyright © 2026 ufiv </span>
+        </div> -->
+        
+    </div>
+</body>
+</html>

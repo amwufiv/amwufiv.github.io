@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="https://blog.ufiv.org/atom.xml" rel="self" type="application/atom+xml" /><link href="https://blog.ufiv.org/" rel="alternate" type="text/html" /><updated>2026-07-01T10:43:13+08:00</updated><id>https://blog.ufiv.org/atom.xml</id><title type="html">UFIV</title><subtitle>Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.</subtitle><entry><title type="html">flink优化1-滑动时间窗去重</title><link href="https://blog.ufiv.org/flink-practices-1.html" rel="alternate" type="text/html" title="flink优化1-滑动时间窗去重" /><published>2024-12-24T15:18:00+08:00</published><updated>2024-12-24T15:18:00+08:00</updated><id>https://blog.ufiv.org/flink-practices-1</id><content type="html" xml:base="https://blog.ufiv.org/flink-practices-1.html"><![CDATA[<h2 id="问题">问题</h2>
+<p>这边接到后台的需求需要提供指标支持游戏平台的流量控速，按几个维度字段计算最近 72h 时间范围内的指标，每 1min 更新，统计逻辑比较简单，SQL 实现：</p>
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">SELECT</span>
+    <span class="n">window_start</span><span class="p">,</span>
+    <span class="n">window_end</span><span class="p">,</span>
+    <span class="k">SUM</span><span class="p">(</span><span class="n">amount</span><span class="p">)</span>          <span class="k">AS</span> <span class="n">total_amount</span><span class="p">,</span>
+    <span class="k">COUNT</span><span class="p">(</span><span class="k">DISTINCT</span> <span class="n">user_id</span><span class="p">)</span> <span class="k">AS</span> <span class="n">distinct_users</span>
+<span class="k">FROM</span> <span class="k">TABLE</span><span class="p">(</span>
+    <span class="n">HOP</span><span class="p">(</span>
+        <span class="k">TABLE</span> <span class="n">orders</span><span class="p">,</span>
+        <span class="k">DESCRIPTOR</span><span class="p">(</span><span class="n">event_time</span><span class="p">),</span>
+        <span class="n">INTERVAL</span> <span class="s1">'1'</span>  <span class="k">MINUTE</span><span class="p">,</span>
+        <span class="n">INTERVAL</span> <span class="s1">'72'</span> <span class="n">HOUR</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="k">GROUP</span> <span class="k">BY</span> <span class="n">window_start</span><span class="p">,</span> <span class="n">window_end</span>
+</code></pre></div></div>
+<p>问题在于窗口很大而步长很短，对于 sum 能够增量累计加和的指标比较简单，而对于去重指标相当于要对每个窗口内的 uid 做去重。最直接的方式当然是直接实现在窗口内去重，但这要求所有的数据都缓存到 window state 中，当窗口触发时得把所有数据拉出来计算一遍，会使窗口触发的时间 cpu 飙升，这是任务开始 15min 后的截图，此时资源都跑满了。</p>
+
+<h2 id="实现">实现</h2>
+<p>有这么高的资源消耗，需要看下 flink 对窗口是如何处理的，网站上只有概念的解释，直接看代码实现。当数据流转到 <code class="language-plaintext highlighter-rouge">windowOperator#processElement</code>，会根据 <code class="language-plaintext highlighter-rouge">windowAssigner</code> 分配窗口。</p>
+
+<p>在我们当前的场景下，则会分配这条数据时间戳所在的所有滑动窗口，即 <code class="language-plaintext highlighter-rouge">72*60=4320</code>，再按每一个分配的窗口切换 window state，把数据写入到对应 window state 中，等于把每一条数据 copy 4320 次。对于滚动窗口或很小的滑动窗口，同时能实现增量累加的任务一般没有问题，因为 state的数据只有数据源里维度排列组合的数量，一般 state 需要存储的数据都很小。
+但需求中数据源 72h 符合条件的上报有 15 万数据量，每条数据有 4320 个窗口，等于需要缓存 6.5 亿条数据，并在每个窗口触发时平均需要从 state 获取 2 万条(一个维度的key)数据。</p>
+
+<h2 id="优化">优化</h2>
+<p>根据上述的逻辑，我们应该把去重转化成能增量累计的计算，这样每个窗口只需要缓存一条数据。理想是在 reduce function 中实现去重，但 flink 的实现 reduce 只是一个纯函数，框架不支持访问 state 或 context，当一条数据合并时也不带当前所在的窗口信息，即使访问 cache 也无法判断去重的范围。</p>
+
+<p>因此需要换个思路在前面数据处理加点 trick，当消费到一条数据以 维度+uid 为 key，从 cache 中获取到同一个 uid 最近的时间戳（不存在则为0）。重新定义滑动窗口分配逻辑，如果 uid 最近的时间戳 previous_ts 在某个时间窗内，说明之前已经有一条数据进同一个时间窗了，那这条新数据则跳过分配相同的时间窗，从而保证一个窗口中只有唯一一个 uid。</p>
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">timestamp</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="na">getCurrentProcessingTime</span><span class="o">();</span>
+<span class="kt">long</span> <span class="n">preConvTS</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span>
+<span class="kt">long</span> <span class="n">curConvTS</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span>
+<span class="k">if</span> <span class="o">(</span><span class="n">element</span> <span class="k">instanceof</span> <span class="nc">QuotaStat</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">QuotaStat</span> <span class="n">quotaStat</span> <span class="o">=</span> <span class="o">(</span><span class="nc">QuotaStat</span><span class="o">)</span> <span class="n">element</span><span class="o">;</span>
+    <span class="n">preConvTS</span> <span class="o">=</span> <span class="n">quotaStat</span><span class="o">.</span><span class="na">getConvInfo</span><span class="o">().</span><span class="na">getPreConvTS</span><span class="o">();</span>
+    <span class="n">curConvTS</span> <span class="o">=</span> <span class="n">quotaStat</span><span class="o">.</span><span class="na">getConvInfo</span><span class="o">().</span><span class="na">getCurConvTS</span><span class="o">();</span>
+<span class="o">}</span>
+<span class="nc">List</span><span class="o">&lt;</span><span class="nc">TimeWindow</span><span class="o">&gt;</span> <span class="n">windows</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ArrayList</span><span class="o">&lt;&gt;((</span><span class="kt">int</span><span class="o">)</span> <span class="o">(</span><span class="n">size</span> <span class="o">/</span> <span class="n">slide</span><span class="o">));</span>
+<span class="kt">long</span> <span class="n">lastStart</span> <span class="o">=</span> <span class="nc">TimeWindow</span><span class="o">.</span><span class="na">getWindowStartWithOffset</span><span class="o">(</span><span class="n">timestamp</span><span class="o">,</span> <span class="n">offset</span><span class="o">,</span> <span class="n">slide</span><span class="o">);</span>
+<span class="k">for</span> <span class="o">(</span><span class="kt">long</span> <span class="n">start</span> <span class="o">=</span> <span class="n">lastStart</span><span class="o">;</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="n">timestamp</span> <span class="o">-</span> <span class="n">size</span><span class="o">;</span> <span class="n">start</span> <span class="o">-=</span> <span class="n">slide</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">if</span> <span class="o">(</span><span class="n">start</span> <span class="o">&gt;</span> <span class="n">preConvTS</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">windows</span><span class="o">.</span><span class="na">add</span><span class="o">(</span><span class="k">new</span> <span class="nc">TimeWindow</span><span class="o">(</span><span class="n">start</span><span class="o">,</span> <span class="n">start</span> <span class="o">+</span> <span class="n">size</span><span class="o">));</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+<span class="k">return</span> <span class="n">windows</span><span class="o">;</span>
+</code></pre></div></div>
+<p>跳过时间窗分配反而跳过后续时间窗处理数据的流程，只要能进入 reduce 函数都是新增，去重指标直接加 1。下面是优化后的效果，cpu 占用和 checkpoint 都很低。</p>]]></content><author><name></name></author><category term="flink" /><category term="flink" /><summary type="html"><![CDATA[问题 这边接到后台的需求需要提供指标支持游戏平台的流量控速，按几个维度字段计算最近 72h 时间范围内的指标，每 1min 更新，统计逻辑比较简单，SQL 实现： SELECT window_start, window_end, SUM(amount) AS total_amount, COUNT(DISTINCT user_id) AS distinct_users FROM TABLE( HOP( TABLE orders, DESCRIPTOR(event_time), INTERVAL '1' MINUTE, INTERVAL '72' HOUR ) ) GROUP BY window_start, window_end 问题在于窗口很大而步长很短，对于 sum 能够增量累计加和的指标比较简单，而对于去重指标相当于要对每个窗口内的 uid 做去重。最直接的方式当然是直接实现在窗口内去重，但这要求所有的数据都缓存到 window state 中，当窗口触发时得把所有数据拉出来计算一遍，会使窗口触发的时间 cpu 飙升，这是任务开始 15min 后的截图，此时资源都跑满了。]]></summary></entry><entry><title type="html">spark执行流程</title><link href="https://blog.ufiv.org/spark-flow.html" rel="alternate" type="text/html" title="spark执行流程" /><published>2023-06-08T15:18:00+08:00</published><updated>2023-06-08T15:18:00+08:00</updated><id>https://blog.ufiv.org/spark-flow</id><content type="html" xml:base="https://blog.ufiv.org/spark-flow.html"><![CDATA[<h2 id="执行主流程">执行主流程</h2>
+<p><img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-flow.4b81ofynias0.png" alt="spark flow" /></p>
+
+<p>当 SQL 任务提交后，parser 会把 SQL 解析成 LogicalPlan，经过 Analyzer、Optimizer 和其它规则分析优化后得到执行计算 executePlan，调用 <code class="language-plaintext highlighter-rouge">queryExecuton.execute()</code>方法会得到 final rdd。当执行 rdd action 操作时，才开始提交 job 给 DAGScheduler， scheduler 按照 rdd llineage 将 job 拆分成stagte 并根据依赖顺序提交，在 submitStage 阶段又会生成具体执行的 tasks，并成生一个新的 taskManager 管理，当 backend 需要新的任务时，taskManager 负责分配 task 给 executor（只分配不分发</p>
+
+<h2 id="生成逻辑执行计划">生成逻辑执行计划</h2>
+<p>当任务提交后，SQL 通过 parser 得到 LogicalPlan，但这只是逻辑上的计划，它是未经校验的，缺少表字段元数据。Analyzer 会对 LogicalPlan 做遍历，分析规则很多，具体可细看 <code class="language-plaintext highlighter-rouge">org.apache.spark.sql.catalyst.analysis.Analyzer</code> 的代码，下面举几个例子</p>
+<ul>
+  <li>CTESubstitution
+    <blockquote>
+      <p>将所有 with clause 表别名在 SQL 的引用替换成实际的查询，纯粹的替换，对性能的优化为 0。（起码在 spark 2.x 中，对于复杂查询，不应该把复杂子查询直接写成 CTE 在 SQL 中多处引用）</p>
+    </blockquote>
+  </li>
+  <li>ResolveFunctions
+    <blockquote>
+      <p>校验函数是否存在，并将函数引用解析成对应的函数表达式</p>
+    </blockquote>
+  </li>
+  <li>TypeCoercion.typeCoercionRules
+    <blockquote>
+      <p>类型的隐式转换，在前面的文章中也有介绍</p>
+    </blockquote>
+  </li>
+</ul>
+
+<h2 id="生成物理执行计划">生成物理执行计划</h2>
+<h3 id="优化">优化</h3>
+<p>得到分析后的 LogicalPlan 后，<code class="language-plaintext highlighter-rouge">SparkOptimizer</code> 会对其进行优化，和 Analyzer 一样也会应用多个规则，具体可细看 <code class="language-plaintext highlighter-rouge">org.apache.spark.sql.execution.SparkOptimizer</code> 的代码，下面举几个例子</p>
+<ul>
+  <li>RewriteDistinctAggregates
+    <blockquote>
+      <p>消除 distinct：以「distinct 字段 + 分组字段」为 key 拆分出多个 group by，不同 key 和非 distinct 查询字段会生成不同的 gid，再 expand 出多份对应 gid 的数据。SQL 中不同字段的 distinct 越多，expand 出来的数据翻的倍数越多（这里可能有性能问题）</p>
+    </blockquote>
+  </li>
+  <li>PushProjectionThroughUnion
+    <blockquote>
+      <p>将字段查询下推给 UNION ALL 子查询</p>
+    </blockquote>
+  </li>
+  <li>RewritePredicateSubquery
+    <blockquote>
+      <p>将 exists / in 条件中的子查询转化为 left semi join（not exists / not in 则转化为 left anti join）</p>
+    </blockquote>
+  </li>
+</ul>
+
+<p>最终得到优化后的 LogicalPlan。</p>
+
+<h3 id="转换成-executeplan">转换成 executePlan</h3>
+<p>优化后的 LogicalPlan 最后经过 <code class="language-plaintext highlighter-rouge">SparkPlanner</code> 的 strategies（将各类型的 plan 转成对应的 exec）处理，得到可执行的 SparkPlan。以 group by SQL 为例，<code class="language-plaintext highlighter-rouge">select column from table</code> 会映射成 Project，group by 聚合会生成 Aggregate；因为 SQL 中用的是支持部分聚合的函数 sum、max，所以会有两个 Aggregate——先在分区内做局部聚合减少数据量，再 Exchange shuffle 后执行一次最终聚合。</p>
+
+<!-- TODO: 补 group by 的 executePlan 截图 -->
+
+<p>spark 任务启动时执行计划也会打印在 driver 日志中，有时可以据此判断开发的 SQL 是否合理。</p>
+
+<h2 id="生成-rdd">生成 RDD</h2>
+<p>得到 SparkPlan 后，调用 <code class="language-plaintext highlighter-rouge">execute()</code> 即可执行并生成 RDD。大概逻辑是：最底层的 TableScan 转化为最原始的 ScanRDD，每个上层计划在子 RDD 的基础上执行操作（如 <code class="language-plaintext highlighter-rouge">mapPartitions(mapFunc)</code>）产生新的 RDD，如此 transform up 得到最终的 RDD。</p>
+
+<!-- TODO: explain codegen & shuffle exchange -->
+
+<h2 id="生成-stage">生成 Stage</h2>
+<p>最终 RDD 在调用 action 方法时，会向 DAGScheduler 提交 job，scheduler 根据 final RDD 的血缘（lineage）和 partition 依赖，追溯并划分不同的 stage。当子 RDD 与父 RDD 之间的依赖是 ShuffleDependency 时，子 RDD 就要拆分出新的 stage。</p>
+
+<h2 id="生成-tasks">生成 Tasks</h2>
+<p>提交 stage 时会同时生成该 stage 的 tasks 并向 taskScheduler 提交，同时广播任务执行代码。创建 task 时会附带 RDD partition 的 locs 信息，为之后按 locality 优先级分配任务提供依据；locs 由每个 RDD 的 <code class="language-plaintext highlighter-rouge">getPreferredLocations</code> 计算得到。</p>
+
+<h2 id="tasks-分配">Tasks 分配</h2>
+<p>tasks 的分配在之前的文章中已有描述，这里不再展开。</p>]]></content><author><name></name></author><category term="spark" /><category term="spark" /><summary type="html"><![CDATA[执行主流程]]></summary></entry><entry><title type="html">spark调优2-类型隐式转换</title><link href="https://blog.ufiv.org/spark-practices-2.html" rel="alternate" type="text/html" title="spark调优2-类型隐式转换" /><published>2023-02-15T15:18:00+08:00</published><updated>2023-02-15T15:18:00+08:00</updated><id>https://blog.ufiv.org/spark-practices-2</id><content type="html" xml:base="https://blog.ufiv.org/spark-practices-2.html"><![CDATA[<h2 id="问题">问题</h2>
+<p>业务反馈看板的数据存在缺失，查看看板对应的数据链路，发现中间有一张 dws 表数据缺失了，看该表的任务是正常执行。比对任务脚本 SQL 及执行日志发现，原因是出在一个条件判断，业务逻辑上我们需要过滤出 uid &gt; 10000 的正常数据，但查询的数据底表刚好 uid 字段为 string 类型。在 spark 中优化后的 SQL 却变成了 <code class="language-plaintext highlighter-rouge">CAST(uid AS INT) &gt; 10000</code>，而 uid 在数值范围上是有可能大于 2^31-1 的，这一部分超出 int 范围的数据因为转换后溢出成负数而使条件判断为 false 被过滤掉。</p>
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+    <span class="o">*</span>
+<span class="k">from</span>
+    <span class="n">table_t</span>
+<span class="k">where</span>
+    <span class="n">date_par</span> <span class="o">=</span> <span class="mi">19700101</span>
+    <span class="k">and</span> <span class="n">uid</span> <span class="o">&gt;</span> <span class="mi">10000</span>
+</code></pre></div></div>
+
+<h2 id="类型转换的逻辑">类型转换的逻辑</h2>
+<p>这里我们可以看一下 spark 中涉及到类型隐式转换的几个处理规则。</p>
+<ol>
+  <li>在 IN 条件判断中，将每个元素转换成同一更宽类型 <code class="language-plaintext highlighter-rouge">findWiderCommonType</code></li>
+  <li>表间的 UNION、INTERSECT、DISTINCT 集合操作同样为 <code class="language-plaintext highlighter-rouge">findWiderCommonType</code></li>
+  <li>算术表达式中的 string 类型转换（含比较操作）：
+    <ol>
+      <li>数据类的计算统一转换成 double，比如 <code class="language-plaintext highlighter-rouge">1 + '1234'</code>,<code class="language-plaintext highlighter-rouge">sum(col@string)</code></li>
+      <li>时间类型的判断统一转换成 string，比如 <code class="language-plaintext highlighter-rouge">2022-01-01@DATE = col@string</code></li>
+    </ol>
+  </li>
+  <li>decimal 间的操作，优先取最大的 scale 和最小的 precision（和整数类型的字段比较不存在精度问题）</li>
+  <li>bool 等值比较，转成与非 bool 值字段相同类型（只限于数值类型），true 为 1，false 为 0。</li>
+  <li>case when then 与 else 分支的类型转换 <code class="language-plaintext highlighter-rouge">findWiderCommonType</code>/<code class="language-plaintext highlighter-rouge">foldLeft(NULL)(findWiderTypeForTwo)</code></li>
+  <li>在 if 条件判断中的类型转换 <code class="language-plaintext highlighter-rouge">findWiderTypeForTwo</code></li>
+  <li>与期望类型的转换，在函数中我们往往会传一些非函数签名类型的参数，在 spark analyzer 中会尝试将所给的参数向目标类型转换。
+    <blockquote>
+      <p>findWiderTypeForTwo 规则：</p>
+      <ol>
+        <li>decimal 与整数类型转化成 decimal</li>
+        <li>decimal 与浮点数类型统一转化成 double</li>
+        <li>数字类型按 byte -&gt; short -&gt; integer -&gt; long -&gt; float -&gt; double 优先级提升</li>
+        <li>时间类型统一转化为 timestamp</li>
+        <li>当类型中有 string 而其它非 bool 和 binary 的原子类型时，统一转化为 string</li>
+      </ol>
+    </blockquote>
+  </li>
+</ol>
+
+<p>当无法满足上述转换规则则报错。</p>
+
+<h2 id="结论">结论</h2>
+<p>实际上按照上述转换规则 uid 字段应该是转换成 double 才对，拉取代码到本地验证也确实如此，这里猜测不一致应该是线上运行的框架有加载其它的规则或改动。</p>
+
+<p>当然这里只讨论 spark 的转换，每个引擎都有各自的一套逻辑，规则存在差异，特别是现在平台都把所有执行引擎封装在背后，因此不要期望我们直觉所想的在任务中会得到我们期望的结果，避免这类问题的最好方法就是不要让它发生：</p>
+<ol>
+  <li>对于业务同一个字段始终统一类型，并在底层处理好。</li>
+  <li>需要对两个不同类型的字段做操作时，显式地使用 cast 转换。</li>
+</ol>]]></content><author><name></name></author><category term="spark" /><category term="spark" /><summary type="html"><![CDATA[问题 业务反馈看板的数据存在缺失，查看看板对应的数据链路，发现中间有一张 dws 表数据缺失了，看该表的任务是正常执行。比对任务脚本 SQL 及执行日志发现，原因是出在一个条件判断，业务逻辑上我们需要过滤出 uid &gt; 10000 的正常数据，但查询的数据底表刚好 uid 字段为 string 类型。在 spark 中优化后的 SQL 却变成了 CAST(uid AS INT) &gt; 10000，而 uid 在数值范围上是有可能大于 2^31-1 的，这一部分超出 int 范围的数据因为转换后溢出成负数而使条件判断为 false 被过滤掉。 select * from table_t where date_par = 19700101 and uid &gt; 10000]]></summary></entry><entry><title type="html">spark调优1-节点动态伸缩</title><link href="https://blog.ufiv.org/spark-practices-1.html" rel="alternate" type="text/html" title="spark调优1-节点动态伸缩" /><published>2022-09-17T17:18:00+08:00</published><updated>2022-09-17T17:18:00+08:00</updated><id>https://blog.ufiv.org/spark-practices-1</id><content type="html" xml:base="https://blog.ufiv.org/spark-practices-1.html"><![CDATA[<h2 id="现象">现象</h2>
+<p>前几天同事反馈有个任务执行时间特别长，跑了几个小时还没出来。看了下 SQL 逻辑发现很简单只是查询过滤了几个上报埋点做 group by sum，实例却一直跑不出来。</p>
+
+<p>将 SQL 复制出来执行同样特别慢。到 ui 界面查看执行情况，发现一开始有 1000 多个executor 但执行完几百个 task 后 executor 开始慢慢被 killed，最后活跃的 executor 掉到个位数。只有几个节点在计算几万个 task 的 stage，难怪会一直跑不出来。
+<img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-practice-1-1.39daz1ozvtc0.png" alt="ui" /></p>
+
+<h2 id="排查过程">排查过程</h2>
+<p>首先从被杀掉的节点查询日志，发现都是在执行完任务 20 - 30s 后被 kill，有些甚至任务都没执行就终止了。
+<img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-practice-1-3.7dpzq5sj1wc0.png" alt="kill log" /></p>
+
+<p>再看 driver 日志，发现里面也有记录节点被 kill 日志。
+<img src="https://github.com/amwufiv/img_host/raw/master/blog/spark-practice-1-2.6hd9f5zk9n40.png" alt="driver log" />
+<code class="language-plaintext highlighter-rouge">ExecutorAllocationManager</code> 打印的日志，因为我们的集群是默认开启动态伸缩的，看 <code class="language-plaintext highlighter-rouge">spark.dynamicAllocation.executorIdleTimeout</code> 执行节点超时时间的配置项值确实是 20s。所以问题是 1000 多个 executor 为什么刚创建出来闲置了 20s 而没有分配到任务呢。先尝试把闲置超时配置项改为 600s，重新执行验证确实正常执行了，监控分配启动了 1000 多个 executor 在执行。但遗留了两个问题：</p>
+<ol>
+  <li>为什么闲置的节点没有分配到任务？</li>
+  <li>节点是动态伸缩的，闲置的节点被杀掉后为何没有再动态扩容，总共还有 5 万多个 task 嗷嗷待哺呢？</li>
+</ol>
+
+<h2 id="程序执行逻辑">程序执行逻辑</h2>
+<p>我们可以看下 spark 代码的执行逻辑。可以看到有一个 <code class="language-plaintext highlighter-rouge">ExecutorAllocationManager</code> 专门负责执行节点的调整，具体是注册了 listener 监听 stage 和 task 的执行、监听 executor 的变化，并派生一个守护线程定时计算是否需要了增加执行节点，清理闲置节点也在守护进程中执行。首先 manager 有一个变量 <code class="language-plaintext highlighter-rouge">numExecutorsTarget</code> 专门记录累计申请的节点数据，初始值为 <code class="language-plaintext highlighter-rouge">spark.dynamicAllocation.initialExecutors</code>，定时任务会先计算等待执行和正在执行的任务数（这里默认一个节点设置 1 个核心），如果等待执行任务数 &gt; <code class="language-plaintext highlighter-rouge">numExecutorsTarget</code> 那以前一轮申请的节点数＊2 向集群申请新执行节点，第一轮申请节点数为 1，直到 <code class="language-plaintext highlighter-rouge">numExecutorsTarget = spark.dynamicAllocation.maxExecutors</code>。</p>
+
+<p><strong>这里的问题是当 <code class="language-plaintext highlighter-rouge">numExecutorsTarget</code> 达到最大时就不会再去向 yarn 发起资源请求，即使之前申请过的节点被杀掉了，这就是闲置的节点被杀掉后没有扩容的原因。</strong></p>
+
+<p>再看任务分配的逻辑，spark 由 <code class="language-plaintext highlighter-rouge">TaskScheduleImpl</code> 来分配任务，又是调用 <code class="language-plaintext highlighter-rouge">TaskSetManager#resourceOffer</code> 来实现。可以理解具体的任务分配逻辑是这样的：</p>
+<ol>
+  <li>将所有可用 executor shuffle 打乱并挨个调用 <code class="language-plaintext highlighter-rouge">resourceOffer</code> 方法来分配任务。</li>
+  <li>某个 executor 是否能分配到任务最主要的影响因素就是待执行任务的 locality 优先级，优先按任务的 locality 优先级分配，依次为 <code class="language-plaintext highlighter-rouge">PROCESS_LOCAL -&gt; NODE_LOCAL -&gt; NO_PREF -&gt; RACK_LOCAL -&gt; ANY</code>。<strong>优先级高的任务都分配完才会分配下一个优先级的任务。</strong></li>
+  <li>locality 优先级也不是绝对一定要分配完任务才降级，因为存在某些场景如 node_local 的节点失败太多被列入黑名单都分配不了，taskManager 分配任务的时间超过了<code class="language-plaintext highlighter-rouge">spark.locality.wait.node</code>还是会临时降级给 executor 分配 rack_local 任务。</li>
+</ol>
+
+<p>那么我们回头看下之前失败任务 driver 的日志，会发现在节点被 killed 前，taskManager 一直在分配 node_local 任务给其它节点，有任务被分配那最后一个分配时间也会一直刷新，也就不会超过<code class="language-plaintext highlighter-rouge">spark.locality.wait.node</code>，导致没有 node_local 任务执行节点一直闲置获取不到任务，最后被杀掉。</p>
+
+<p>任务的优先级是如何定义的？
+添加任务时会把任务做归类，如果一个任务数据的 host 也有执行的 executor 在跑那这个任务会被加到 node_pending_tasks 队列。因为集群没有机架信息，所以实际任务默认会添加到 rack_local_pending_tasks 队列。</p>
+
+<h2 id="优化">优化</h2>
+<p>根据上面分析的原因，我们可以优化的配置项有：</p>
+<ol>
+  <li>将闲置超时时间改长 <code class="language-plaintext highlighter-rouge">set spark.dynamicAllocation.executorIdleTimeout=600s</code>;</li>
+  <li>将读取同节点数据的超时时间设置为0 <code class="language-plaintext highlighter-rouge">set spark.locality.wait.node=0</code>;</li>
+</ol>
+
+<p>但如上面所说，如果修改闲置时间过长，因为 spark task 分配优先级的机制，在 node_local tasks 跑完前虽然节点没有被杀掉但大部分基本处于闲置状态，浪费集群资源。</p>
+
+<p>实际测试发现，如果跳过 node_local 的分配优先级执行时间会更快，基本所有的节点都能够立即获取任务并执行。虽然跨机器读取数据会有网络延迟及带宽限制，但在今天几十T的数据都能在百ms内跨过太平洋到达西海岸，何况是内部的计算集群。实际看执行日志读取一个 rack_local 的任务数据并计算完成也只花了 2s。</p>
+
+<h2 id="结果">结果</h2>
+<p>修改配置后基本 10min 跑完任务。</p>]]></content><author><name></name></author><category term="spark" /><category term="spark" /><summary type="html"><![CDATA[现象 前几天同事反馈有个任务执行时间特别长，跑了几个小时还没出来。看了下 SQL 逻辑发现很简单只是查询过滤了几个上报埋点做 group by sum，实例却一直跑不出来。]]></summary></entry><entry><title type="html">分享-CPython Internals</title><link href="https://blog.ufiv.org/cpython-internals.html" rel="alternate" type="text/html" title="分享-CPython Internals" /><published>2021-11-25T01:00:00+08:00</published><updated>2021-11-25T01:00:00+08:00</updated><id>https://blog.ufiv.org/cpython-internals</id><content type="html" xml:base="https://blog.ufiv.org/cpython-internals.html"><![CDATA[<iframe src="/assets/files/cpython-internals.pdf" width="100%" height="600px" style="border: 1px solid #ddd;" loading="lazy">
+</iframe>]]></content><author><name></name></author><category term="python" /><category term="python" /><category term="cpython" /><summary type="html"><![CDATA[]]></summary></entry><entry><title type="html">Scala中的CanBuildFrom</title><link href="https://blog.ufiv.org/canbuildfrom.html" rel="alternate" type="text/html" title="Scala中的CanBuildFrom" /><published>2018-07-03T15:18:03+08:00</published><updated>2018-07-03T15:18:03+08:00</updated><id>https://blog.ufiv.org/canbuildfrom</id><content type="html" xml:base="https://blog.ufiv.org/canbuildfrom.html"><![CDATA[<p>了解CanBuildFrom主要还是因为我对Traversable能够正确处理Option上下文感到很不解（如下），List的flatMap函数能够正确拆掉Option上下文变成(2,3,4)，要知道Option也只是简单继承了两个与之无关的特质Product<sup id="fnref:Product"><a href="#fn:Product" class="footnote" rel="footnote" role="doc-noteref">1</a></sup>和Serializable，为何flatMap能够正确识别Option呢？</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">List</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span><span class="mi">2</span><span class="o">,</span><span class="mi">3</span><span class="o">).</span><span class="py">flatMap</span><span class="o">(</span><span class="n">x</span><span class="k">=&gt;</span><span class="nc">Some</span><span class="o">(</span><span class="n">x</span><span class="o">+</span><span class="mi">1</span><span class="o">))</span>
+<span class="c1">//res2: List[Int] = List(2, 3, 4)</span>
+</code></pre></div></div>
+<p>看一下List的flatMap函数签名：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">final</span> <span class="k">override</span> <span class="k">def</span> <span class="nf">flatMap</span><span class="o">[</span><span class="kt">B</span>, <span class="kt">That</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="nc">GenTraversableOnce</span><span class="o">[</span><span class="kt">B</span><span class="o">])(</span><span class="k">implicit</span> <span class="n">bf</span><span class="k">:</span> <span class="kt">CanBuildFrom</span><span class="o">[</span><span class="kt">List</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span>, <span class="kt">B</span>, <span class="kt">That</span><span class="o">])</span><span class="k">:</span> <span class="kt">That</span>
+</code></pre></div></div>
+<p>flatMap函数要求f是一个返回继承GenTraversableOnce特质的函数，那为什么能够返回Option呢，查看编译时的类型变换，发现原来存在一个隐式转换将Option转换成了Iterable：implicit def option2Iterable<a href="xo: Option[A]">A</a>: Iterable[A]。该隐式转换函数调用了toList方法将Option转换成了List,所以也就符合了f的函数签名，因为Some(x+1)被隐式转换成了List(x+1)。接下来就比较容易理解了，flatMap函数将具有traversable能力的上下文‘扁平化’，实现上是调用了seq统一将变成seq。</p>
+
+<p>所以说隐式转换虽然能够帮助我们开发更灵活的代码，但也加大了我们去理解别人代码的困难，这点在理解后面String的map函数中更有体会。</p>
+
+<h2 id="canbuildfrom">CanBuildFrom</h2>
+<p>那么CanBuildFrom又是什么呢，仔细看List的map和flatMap函数签名，发现它们都声明了一个隐式的CanBuildFrom参数bf。这个参数是用来干什么的呢，查看CanBuildFrom源码，发现bf主要是用来构建Builder的（通过构造函数）。</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">trait</span> <span class="nc">CanBuildFrom</span><span class="o">[</span><span class="kt">-From</span>, <span class="kt">-Elem</span>, <span class="kt">+To</span><span class="o">]</span> <span class="o">{</span>
+
+  <span class="cm">/** Creates a new builder on request of a collection.
+   *  @param from  the collection requesting the builder to be created.
+   *  @return a builder for collections of type To with element type Elem.
+   *          The collections framework usually arranges things so
+   *          that the created builder will build the same kind of collection
+   *          as from.
+   */</span>
+  <span class="k">def</span> <span class="nf">apply</span><span class="o">(</span><span class="n">from</span><span class="k">:</span> <span class="kt">From</span><span class="o">)</span><span class="k">:</span> <span class="kt">Builder</span><span class="o">[</span><span class="kt">Elem</span>, <span class="kt">To</span><span class="o">]</span>
+
+  <span class="cm">/** Creates a new builder from scratch.
+   *
+   *  @return a builder for collections of type To with element type Elem.
+   *  @see scala.collection.breakOut
+   */</span>
+  <span class="k">def</span> <span class="nf">apply</span><span class="o">()</span><span class="k">:</span> <span class="kt">Builder</span><span class="o">[</span><span class="kt">Elem</span>, <span class="kt">To</span><span class="o">]</span>
+<span class="o">}</span>
+</code></pre></div></div>
+<p>例如通过map函数，理论上我们能够将List[Int]构建成Seq[String],即根据需要返回合适的集合类型。通过bf()构建的builder，构造封装B的集合。有趣的是List中的map函数居然没有使用bf的builder，而还是自己实现构造了新的List，所以通过List.map还是转换成了List。
+而对于String的map函数(其实不是String而是StringOps的map函数),当f函数将字符串中每个字符转换成Int时，map函数会返回IndexedSeq类型集合，而如果f函数只是将字符作大写化处理时，map函数仍然会返回String。</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="s">"abc"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toInt</span><span class="o">)</span> 
+<span class="c1">//res4: scala.collection.immutable.IndexedSeq[Int] = Vector(97, 98, 99)</span>
+<span class="s">"abc"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)</span> 
+<span class="c1">//res5: String = ABC</span>
+</code></pre></div></div>
+<p>这是如何实现的呢？原来在Predef中定义了两个隐式方法/参数fallbackStringCanBuildFrom和StringCanBuildFrom,将f函数返回Char时会使用StringCanBuildFrom作为map的隐式参数，而f函数返回非Char时则会调用fallbackStringCanBuildFrom隐式方法。</p>
+
+<p>对于map，flatMap等函数，我们都可以通过传递cbf来构建合适的上下文，尽管函数签名比较让人难以理解。而在<a href="https://scala-lang.org/blog/2017/05/30/tribulations-canbuildfrom.html">官方的说明中</a>，已经考虑将CanBuildFrom这种晦涩难懂且不雅观的构建方式摒弃掉，通过使用map重载的方式实现目前的map函数。</p>
+
+<h3 id="构建一个自己bf">构建一个自己bf</h3>
+<p>那我们有没有办法将“hunter”.map(_.toUpper)也返回indexedSeq呢？当然可以，最简单的我们可以直接显式调用fallbackStringCanBuildFrom：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">val</span> <span class="nv">s1</span> <span class="k">=</span> <span class="s">"hunter"</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)(</span><span class="n">fallbackStringCanBuildFrom</span><span class="o">)</span>
+</code></pre></div></div>
+<p>如果了解map的构造方式后我们也可以构造自己的CanBuildFrom：</p>
+<div class="language-scala highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">object</span> <span class="nc">Temp</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="nf">main</span><span class="o">(</span><span class="n">args</span><span class="k">:</span> <span class="kt">Array</span><span class="o">[</span><span class="kt">String</span><span class="o">])</span><span class="k">:</span> <span class="kt">Unit</span> <span class="o">=</span> <span class="o">{</span>
+
+
+
+    <span class="k">val</span> <span class="nv">myBF</span><span class="k">:</span> <span class="kt">CanBuildFrom</span><span class="o">[</span><span class="kt">String</span>, <span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">CanBuildFrom</span><span class="o">[</span><span class="kt">String</span>, <span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]</span> <span class="o">{</span>
+      <span class="k">def</span> <span class="nf">apply</span><span class="o">(</span><span class="n">from</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=</span> <span class="nf">apply</span><span class="o">()</span>
+      <span class="k">def</span> <span class="nf">apply</span><span class="o">()</span>             <span class="k">=</span> <span class="k">new</span> <span class="nc">MyBuilder</span>
+    <span class="o">}</span>
+    <span class="k">val</span> <span class="nv">s</span> <span class="k">=</span> <span class="s">"hunter"</span>
+    <span class="k">val</span> <span class="nv">l</span> <span class="k">=</span> <span class="nv">s</span><span class="o">.</span><span class="py">map</span><span class="o">(</span><span class="nv">_</span><span class="o">.</span><span class="py">toUpper</span><span class="o">)(</span><span class="n">myBF</span><span class="o">)</span>
+    <span class="nf">println</span><span class="o">(</span><span class="n">l</span><span class="o">)</span>
+    <span class="c1">// l is List(H, U, N, T, E, R)</span>
+
+
+  <span class="o">}</span>
+
+
+
+<span class="o">}</span>
+
+<span class="k">class</span> <span class="nc">MyBuilder</span><span class="o">(</span><span class="n">list</span><span class="k">:</span> <span class="kt">ListBuffer</span><span class="o">[</span><span class="kt">Char</span><span class="o">])</span> <span class="k">extends</span> <span class="nc">ReusableBuilder</span><span class="o">[</span><span class="kt">Char</span>, <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]]{</span>
+  <span class="k">def</span> <span class="nf">this</span><span class="o">()={</span>
+    <span class="nf">this</span><span class="o">(</span><span class="k">new</span> <span class="nc">ListBuffer</span><span class="o">[</span><span class="kt">Char</span><span class="o">])</span>
+  <span class="o">}</span>
+
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">clear</span><span class="o">()</span><span class="k">:</span> <span class="kt">Unit</span> <span class="o">=</span> <span class="o">{</span>
+    <span class="nv">list</span><span class="o">.</span><span class="py">clear</span><span class="o">()</span>
+  <span class="o">}</span>
+
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">+=</span><span class="o">(</span><span class="n">elem</span><span class="k">:</span> <span class="kt">Char</span><span class="o">)</span><span class="k">:</span> <span class="kt">MyBuilder.this.</span><span class="k">type</span> <span class="o">=</span> <span class="o">{</span><span class="nv">list</span><span class="o">.</span><span class="py">append</span><span class="o">(</span><span class="n">elem</span><span class="o">);</span><span class="k">this</span><span class="o">}</span>
+  <span class="k">override</span> <span class="k">def</span> <span class="nf">result</span><span class="o">()</span><span class="k">:</span> <span class="kt">List</span><span class="o">[</span><span class="kt">Char</span><span class="o">]</span> <span class="k">=</span> <span class="nv">list</span><span class="o">.</span><span class="py">toList</span>
+<span class="o">}</span>
+
+</code></pre></div></div>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:Product">
+      <p>题外还有一个有趣的地方，上文讲到Option引入了特质Product，Product主要是实现productIterator从而实现向Iterator的转换。在我们声明的case class中，编译器会在编译过程中自动引入Product，所以每当我们声明case class时，总能调用productIterator方法来遍历各元素。 <a href="#fnref:Product" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>]]></content><author><name></name></author><category term="jekyll" /><category term="update" /><category term="scala" /><summary type="html"><![CDATA[了解CanBuildFrom主要还是因为我对Traversable能够正确处理Option上下文感到很不解（如下），List的flatMap函数能够正确拆掉Option上下文变成(2,3,4)，要知道Option也只是简单继承了两个与之无关的特质Product1和Serializable，为何flatMap能够正确识别Option呢？ List(1,2,3).flatMap(x=&gt;Some(x+1)) //res2: List[Int] = List(2, 3, 4) 看一下List的flatMap函数签名： final override def flatMap[B, That](f: A =&gt; GenTraversableOnce[B])(implicit bf: CanBuildFrom[List[A], B, That]): That flatMap函数要求f是一个返回继承GenTraversableOnce特质的函数，那为什么能够返回Option呢，查看编译时的类型变换，发现原来存在一个隐式转换将Option转换成了Iterable：implicit def option2IterableA: Iterable[A]。该隐式转换函数调用了toList方法将Option转换成了List,所以也就符合了f的函数签名，因为Some(x+1)被隐式转换成了List(x+1)。接下来就比较容易理解了，flatMap函数将具有traversable能力的上下文‘扁平化’，实现上是调用了seq统一将变成seq。 题外还有一个有趣的地方，上文讲到Option引入了特质Product，Product主要是实现productIterator从而实现向Iterator的转换。在我们声明的case class中，编译器会在编译过程中自动引入Product，所以每当我们声明case class时，总能调用productIterator方法来遍历各元素。 &#8617;]]></summary></entry></feed>
